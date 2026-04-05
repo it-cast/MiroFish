@@ -224,10 +224,10 @@ async function criarSimulacao() {
       max_rounds: rodadas.value
     })
 
-    router.push(`/simulacao/${projectId}`)
+    router.push(`/simulacao/${projectId}?agentes=${agentes.value}&rodadas=${rodadas.value}`)
   } catch (e) {
     console.error('Erro ao criar simulação:', e)
-    error.value = e?.response?.data?.error || 'Erro ao criar simulação. Tente novamente.'
+    error.value = e?.response?.data?.error || e?.message || 'Erro ao criar simulação. Tente novamente.'
   } finally {
     isLoading.value = false
   }
