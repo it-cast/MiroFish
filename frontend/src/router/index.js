@@ -1,16 +1,18 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import DashboardView from '../views/DashboardView.vue'
+import NovoProjetoView from '../views/NovoProjetoView.vue'
+import ProjetoView from '../views/ProjetoView.vue'
 import NewSimulationView from '../views/NewSimulationView.vue'
 import SimulationView from '../views/SimulationView.vue'
 import SimulationRunView from '../views/SimulationRunView.vue'
 import ReportView from '../views/ReportView.vue'
 import InteractionView from '../views/InteractionView.vue'
-import ProjetoView from '../views/ProjetoView.vue'
 
 const routes = [
   { path: '/', name: 'Dashboard', component: DashboardView },
-  { path: '/novo', name: 'NovaSimulacao', component: NewSimulationView },
+  { path: '/projeto/novo', name: 'NovoProjeto', component: NovoProjetoView },
   { path: '/projeto/:projectId', name: 'Projeto', component: ProjetoView, props: true },
+  { path: '/novo', name: 'NovaSimulacao', component: NewSimulationView },
   { path: '/simulacao/:projectId', name: 'Simulacao', component: SimulationView, props: true },
   { path: '/simulacao/:simulationId/executar', name: 'Execucao', component: SimulationRunView, props: true },
   { path: '/relatorio/:reportId', name: 'Relatorio', component: ReportView, props: true },
