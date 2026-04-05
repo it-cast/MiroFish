@@ -6,27 +6,21 @@ import service from '../api'
 
 const router = useRouter()
 
-// ─── Estado do wizard ───────────────────────────────────────────
 const step = ref(1)
 const isLoading = ref(false)
 const error = ref('')
 
-// ─── Etapa 1: Hipótese ──────────────────────────────────────────
 const segmento = ref('')
 const cenario = ref('')
 const titulo = ref('')
 const hipotese = ref('')
 const gerandoHipotese = ref(false)
-
-// ─── Etapa 2: Materiais ─────────────────────────────────────────
 const arquivos = ref([])
-
-// ─── Etapa 3: Parâmetros ─────────────────────────────────────────
 const agentes = ref(50)
 const rodadas = ref(20)
 const dataReferencia = ref(new Date().toISOString().split('T')[0])
+const dragOver = ref(false)
 
-// ─── Segmentos ──────────────────────────────────────────────────
 const segmentos = [
   {
     id: 'politica',
@@ -113,28 +107,22 @@ const segmentos = [
 const segmentoAtual = computed(() => segmentos.find(s => s.id === segmento.value))
 const exemplosAtuais = computed(() => segmentoAtual.value?.exemplos || [])
 
-// ─── Selecionar exemplo ──────────────────────────────────────────
 function selecionarExemplo(ex) {
   cenario.value = ex
   hipotese.value = ex
   titulo.value = ex.slice(0, 60)
 }
 
-// ─── Estimativas em tempo real ──────────────────────────────────
-const estimativaMinutos = computed(() => {
-  const base = agentes.value * rodadas.value * 0.04
-  return Math.round(Math.max(2, base))
-})
-const estimativaCusto = computed(() => {
-  const custo = agentes.value * rodadas.value * 0.0008
-  return custo.toFixed(2)
-})
+const estimativaMinutos = computed(() => Math.round(Math.max(2, agentes.value * rodadas.value * 0.04)))
+const estimativaCusto = computed(() => (agentes.value * rodadas.value * 0.0008).toFixed(2))
+
 const descricaoAgentes = computed(() => {
   if (agentes.value <= 20) return 'Teste rápido — ideal para validar a hipótese'
   if (agentes.value <= 100) return 'Bom equilíbrio entre velocidade e precisão'
   if (agentes.value <= 250) return 'Alta fidelidade — captura nuances importantes'
   return 'Máxima riqueza — simulação de alta complexidade'
 })
+
 const descricaoRodadas = computed(() => {
   if (rodadas.value <= 5) return 'Instantâneo — reação imediata ao evento'
   if (rodadas.value <= 25) return 'Captura tendências de curto prazo'
@@ -142,7 +130,6 @@ const descricaoRodadas = computed(() => {
   return 'Análise profunda — evolução de longo prazo'
 })
 
-// ─── Qualidade dos materiais ────────────────────────────────────
 const qualidadeMateriais = computed(() => {
   const n = arquivos.value.length
   if (n === 0) return { label: 'Sem materiais', cor: '#6b6b80', desc: 'Os agentes usarão apenas a hipótese como base' }
@@ -151,11 +138,9 @@ const qualidadeMateriais = computed(() => {
   return { label: 'Excelente', cor: '#00e5c3', desc: 'Base de conhecimento robusta para simulação precisa' }
 })
 
-// ─── Validações ─────────────────────────────────────────────────
 const etapa1Valida = computed(() => titulo.value.trim().length >= 3 && hipotese.value.trim().length >= 10)
 const etapa3Valida = computed(() => agentes.value >= 5 && rodadas.value >= 1)
 
-// ─── Gerar hipótese com IA ──────────────────────────────────────
 async function gerarHipotese() {
   if (!cenario.value.trim()) return
   gerandoHipotese.value = true
@@ -176,35 +161,26 @@ async function gerarHipotese() {
   }
 }
 
-// ─── Upload de arquivos ─────────────────────────────────────────
 function onFileChange(event) {
-  const files = Array.from(event.target.files || [])
-  adicionarArquivos(files)
+  adicionarArquivos(Array.from(event.target.files || []))
 }
 
 function onDrop(event) {
   event.preventDefault()
   dragOver.value = false
-  const files = Array.from(event.dataTransfer.files || [])
-  adicionarArquivos(files)
+  adicionarArquivos(Array.from(event.dataTransfer.files || []))
 }
 
 function adicionarArquivos(files) {
   files.forEach(f => {
     if (f.size > 16 * 1024 * 1024) return
-    const allowed = ['application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document','text/plain','image/png','image/jpeg']
+    const allowed = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain', 'image/png', 'image/jpeg']
     if (!allowed.includes(f.type) && !f.name.match(/\.(pdf|docx|txt|png|jpg|jpeg)$/i)) return
-    if (!arquivos.value.find(a => a.name === f.name)) {
-      arquivos.value.push(f)
-    }
+    if (!arquivos.value.find(a => a.name === f.name)) arquivos.value.push(f)
   })
 }
 
-function removerArquivo(idx) {
-  arquivos.value.splice(idx, 1)
-}
-
-const dragOver = ref(false)
+function removerArquivo(idx) { arquivos.value.splice(idx, 1) }
 
 function formatBytes(bytes) {
   if (bytes < 1024) return bytes + ' B'
@@ -220,71 +196,66 @@ function fileIcon(name) {
   return '📎'
 }
 
-// ─── Criar simulação ────────────────────────────────────────────
+// ─── Criar simulação — fluxo correto do backend ─────────────────
+// 1. POST /api/graph/ontology/generate → upload + hipótese → project_id
+// 2. POST /api/graph/build             → iniciar construção do grafo
+// 3. Navegar para /simulacao/:projectId
 async function criarSimulacao() {
   if (!etapa3Valida.value) return
   isLoading.value = true
   error.value = ''
   try {
     const formData = new FormData()
-    formData.append('project_name', titulo.value)
     formData.append('simulation_requirement', hipotese.value)
-    formData.append('segmento', segmento.value)
-    formData.append('agent_count', agentes.value)
-    formData.append('max_rounds', rodadas.value)
-    formData.append('data_referencia', dataReferencia.value)
+    formData.append('project_name', titulo.value)
     arquivos.value.forEach(f => formData.append('files', f))
 
-    const res = await service.post('/api/graph/upload', formData, {
+    const res1 = await service.post('/api/graph/ontology/generate', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
-    const data = res.data || res
-    const projectId = data.project_id || data.id
+    const ontologyData = res1.data || res1
+    const projectId = ontologyData.project_id
+    if (!projectId) throw new Error('project_id não retornado pelo servidor')
+
+    await service.post('/api/graph/build', {
+      project_id: projectId,
+      simulation_requirement: hipotese.value,
+      max_agents: agentes.value,
+      max_rounds: rodadas.value
+    })
+
     router.push(`/simulacao/${projectId}`)
   } catch (e) {
-    error.value = 'Erro ao criar simulação. Tente novamente.'
+    console.error('Erro ao criar simulação:', e)
+    error.value = e?.response?.data?.error || 'Erro ao criar simulação. Tente novamente.'
   } finally {
     isLoading.value = false
   }
 }
 
-function proximaEtapa() {
-  if (step.value < 3) step.value++
-}
-function etapaAnterior() {
-  if (step.value > 1) step.value--
-}
+function proximaEtapa() { if (step.value < 3) step.value++ }
+function etapaAnterior() { if (step.value > 1) step.value-- }
 </script>
 
 <template>
   <AppShell title="Nova Simulação">
     <div class="wizard-shell">
 
-      <!-- Breadcrumb -->
       <div class="breadcrumb">
         <span class="bc-link" @click="router.push('/')">← Simulações</span>
         <span class="bc-sep">›</span>
         <span class="bc-current">Nova Simulação</span>
       </div>
 
-      <!-- Header -->
       <div class="wizard-header">
         <h1 class="wizard-title">Nova Simulação</h1>
         <p class="wizard-sub">Configure sua hipótese e deixe a inteligência de enxame revelar o futuro.</p>
       </div>
 
-      <!-- Steps indicator -->
       <div class="steps-track">
-        <div
-          v-for="(label, i) in ['Hipótese', 'Materiais', 'Parâmetros']"
-          :key="i"
-          class="step-item"
-          :class="{ active: step === i + 1, done: step > i + 1 }"
-        >
+        <div v-for="(label, i) in ['Hipótese', 'Materiais', 'Parâmetros']" :key="i" class="step-item" :class="{ active: step === i + 1, done: step > i + 1 }">
           <div class="step-dot">
-            <span v-if="step > i + 1" class="step-check">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3,8 6.5,12 13,4"/></svg>
-            </span>
+            <span v-if="step > i + 1" class="step-check"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3,8 6.5,12 13,4"/></svg></span>
             <span v-else>{{ i + 1 }}</span>
           </div>
           <div class="step-connector" v-if="i < 2" :class="{ done: step > i + 1 }"></div>
@@ -292,9 +263,8 @@ function etapaAnterior() {
         </div>
       </div>
 
-      <!-- ETAPA 1: HIPÓTESE -->
+      <!-- ETAPA 1 -->
       <div v-if="step === 1" class="step-content">
-
         <div class="card">
           <div class="card-head">
             <span class="card-icon">💡</span>
@@ -304,13 +274,7 @@ function etapaAnterior() {
             </div>
           </div>
           <div class="segment-grid">
-            <button
-              v-for="seg in segmentos"
-              :key="seg.id"
-              class="segment-btn"
-              :class="{ selected: segmento === seg.id }"
-              @click="segmento = seg.id"
-            >
+            <button v-for="seg in segmentos" :key="seg.id" class="segment-btn" :class="{ selected: segmento === seg.id }" @click="segmento = seg.id">
               <span class="seg-icon" v-html="seg.icon"></span>
               <span class="seg-label">{{ seg.label }}</span>
             </button>
@@ -319,19 +283,9 @@ function etapaAnterior() {
 
         <transition name="fade">
           <div v-if="exemplosAtuais.length" class="card card-slim">
-            <div class="examples-label">
-              <span class="ex-icon">✦</span>
-              Exemplos de hipóteses para este segmento:
-            </div>
+            <div class="examples-label"><span class="ex-icon">✦</span> Exemplos de hipóteses para este segmento:</div>
             <div class="examples-list">
-              <button
-                v-for="ex in exemplosAtuais"
-                :key="ex"
-                class="example-chip"
-                @click="selecionarExemplo(ex)"
-              >
-                {{ ex }}
-              </button>
+              <button v-for="ex in exemplosAtuais" :key="ex" class="example-chip" @click="selecionarExemplo(ex)">{{ ex }}</button>
             </div>
           </div>
         </transition>
@@ -344,23 +298,12 @@ function etapaAnterior() {
               <div class="card-sub">Descreva em linguagem natural o que quer prever ou entender. A IA vai estruturar sua hipótese automaticamente.</div>
             </div>
           </div>
-
           <div class="field">
             <label class="field-label">Descreva seu cenário</label>
-            <textarea
-              v-model="cenario"
-              class="field-textarea"
-              placeholder="Ex: Quero entender como diferentes grupos da população vão reagir a um aumento de impostos sobre combustíveis..."
-              rows="3"
-            />
+            <textarea v-model="cenario" class="field-textarea" placeholder="Ex: Quero entender como diferentes grupos da população vão reagir a um aumento de impostos sobre combustíveis..." rows="3"/>
             <div class="field-hint">Quanto mais contexto você fornecer, mais precisa será a simulação.</div>
           </div>
-
-          <button
-            class="btn-generate"
-            :disabled="!cenario.trim() || gerandoHipotese"
-            @click="gerarHipotese"
-          >
+          <button class="btn-generate" :disabled="!cenario.trim() || gerandoHipotese" @click="gerarHipotese">
             <span v-if="gerandoHipotese" class="spinner"></span>
             <span v-else>✦</span>
             {{ gerandoHipotese ? 'Gerando hipótese...' : 'Gerar hipótese com IA' }}
@@ -369,76 +312,38 @@ function etapaAnterior() {
 
         <div class="card">
           <div class="card-divider-label">Prefere preencher diretamente? Use os campos abaixo.</div>
-
           <div class="field">
             <label class="field-label">Título <span class="required">*</span></label>
-            <input
-              v-model="titulo"
-              class="field-input"
-              type="text"
-              placeholder="Ex: Impacto da reforma tributária na opinião pública"
-            />
+            <input v-model="titulo" class="field-input" type="text" placeholder="Ex: Impacto da reforma tributária na opinião pública"/>
           </div>
-
           <div class="field">
             <label class="field-label">Hipótese de Previsão <span class="required">*</span></label>
-            <textarea
-              v-model="hipotese"
-              class="field-textarea"
-              placeholder="Como X vai impactar Y nos próximos Z meses?"
-              rows="3"
-            />
+            <textarea v-model="hipotese" class="field-textarea" placeholder="Como X vai impactar Y nos próximos Z meses?" rows="3"/>
           </div>
         </div>
 
         <div class="step-nav">
           <button class="btn-cancel" @click="router.push('/')">← Cancelar</button>
-          <button
-            class="btn-next"
-            :disabled="!etapa1Valida"
-            @click="proximaEtapa"
-          >
-            Próximo: Materiais →
-          </button>
+          <button class="btn-next" :disabled="!etapa1Valida" @click="proximaEtapa">Próximo: Materiais →</button>
         </div>
       </div>
 
-      <!-- ETAPA 2: MATERIAIS -->
+      <!-- ETAPA 2 -->
       <div v-else-if="step === 2" class="step-content">
-
         <div class="card">
           <div class="card-head">
             <span class="card-icon">📁</span>
             <div>
-              <div class="card-title">
-                Materiais de Sementes
-                <span class="optional-badge">opcional, mas recomendado</span>
-              </div>
+              <div class="card-title">Materiais de Sementes <span class="optional-badge">opcional, mas recomendado</span></div>
               <div class="card-sub">Carregue relatórios, notícias, pesquisas ou qualquer documento relevante. Eles alimentam o grafo de conhecimento e tornam os agentes muito mais precisos.</div>
             </div>
           </div>
-
           <div class="quality-tip">
             <span>💡</span>
             Dica: Documentos de qualidade fazem uma diferença enorme. Pesquisas acadêmicas, relatórios de mercado e dados históricos são os melhores insumos.
           </div>
-
-          <div
-            class="drop-zone"
-            :class="{ 'drag-over': dragOver }"
-            @dragover.prevent="dragOver = true"
-            @dragleave="dragOver = false"
-            @drop="onDrop"
-            @click="$refs.fileInput.click()"
-          >
-            <input
-              ref="fileInput"
-              type="file"
-              multiple
-              accept=".pdf,.docx,.doc,.txt,.png,.jpg,.jpeg"
-              style="display:none"
-              @change="onFileChange"
-            />
+          <div class="drop-zone" :class="{ 'drag-over': dragOver }" @dragover.prevent="dragOver = true" @dragleave="dragOver = false" @drop="onDrop" @click="$refs.fileInput.click()">
+            <input ref="fileInput" type="file" multiple accept=".pdf,.docx,.doc,.txt,.png,.jpg,.jpeg" style="display:none" @change="onFileChange"/>
             <div class="drop-content">
               <div class="drop-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32">
@@ -451,7 +356,6 @@ function etapaAnterior() {
               <div class="drop-sub">PDF, DOCX, TXT, PNG, JPG — até 16MB cada</div>
             </div>
           </div>
-
           <transition-group name="file-list" tag="div" class="files-list" v-if="arquivos.length">
             <div v-for="(arq, idx) in arquivos" :key="arq.name" class="file-item">
               <span class="file-icon">{{ fileIcon(arq.name) }}</span>
@@ -460,19 +364,13 @@ function etapaAnterior() {
                 <div class="file-size">{{ formatBytes(arq.size) }}</div>
               </div>
               <button class="file-remove" @click="removerArquivo(idx)">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                  <line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/>
-                </svg>
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>
               </button>
             </div>
           </transition-group>
-
           <div class="quality-indicator">
             <div class="quality-bar">
-              <div
-                class="quality-fill"
-                :style="{ width: Math.min(100, arquivos.length * 25) + '%', background: qualidadeMateriais.cor }"
-              ></div>
+              <div class="quality-fill" :style="{ width: Math.min(100, arquivos.length * 25) + '%', background: qualidadeMateriais.cor }"></div>
             </div>
             <div class="quality-info">
               <span class="quality-label" :style="{ color: qualidadeMateriais.cor }">{{ qualidadeMateriais.label }}</span>
@@ -480,52 +378,39 @@ function etapaAnterior() {
             </div>
           </div>
         </div>
-
         <div class="step-nav">
           <button class="btn-back" @click="etapaAnterior">← Voltar</button>
           <button class="btn-next" @click="proximaEtapa">Próximo: Parâmetros →</button>
         </div>
       </div>
 
-      <!-- ETAPA 3: PARÂMETROS -->
+      <!-- ETAPA 3 -->
       <div v-else-if="step === 3" class="step-content">
-
         <div class="card">
           <div class="card-title-lg">Parâmetros da Simulação</div>
           <div class="card-sub-lg">Mais agentes e rodadas = análise mais rica e precisa, porém mais lenta.</div>
-
           <div class="param-block">
             <div class="param-header">
               <label class="param-label">Número de Agentes</label>
               <span class="param-value accent">{{ agentes }}</span>
             </div>
-            <input type="range" min="5" max="500" step="5" v-model.number="agentes" class="slider" />
-            <div class="param-bounds">
-              <span>5 (teste rápido)</span>
-              <span>500 (máxima riqueza)</span>
-            </div>
+            <input type="range" min="5" max="500" step="5" v-model.number="agentes" class="slider"/>
+            <div class="param-bounds"><span>5 (teste rápido)</span><span>500 (máxima riqueza)</span></div>
             <div class="param-desc">{{ descricaoAgentes }}</div>
           </div>
-
           <div class="param-block">
             <div class="param-header">
               <label class="param-label">Número de Rodadas</label>
               <span class="param-value accent">{{ rodadas }}</span>
             </div>
-            <input type="range" min="1" max="100" step="1" v-model.number="rodadas" class="slider" />
-            <div class="param-bounds">
-              <span>1 (instantâneo)</span>
-              <span>100 (evolução completa)</span>
-            </div>
+            <input type="range" min="1" max="100" step="1" v-model.number="rodadas" class="slider"/>
+            <div class="param-bounds"><span>1 (instantâneo)</span><span>100 (evolução completa)</span></div>
             <div class="param-desc">{{ descricaoRodadas }}</div>
           </div>
-
           <div class="param-block">
-            <div class="param-header">
-              <label class="param-label">Data de Referência Temporal</label>
-            </div>
+            <div class="param-header"><label class="param-label">Data de Referência Temporal</label></div>
             <div class="param-sub">O sistema usará esta data como "hoje" em todas as análises e cenários.</div>
-            <input type="date" v-model="dataReferencia" class="field-input date-input" />
+            <input type="date" v-model="dataReferencia" class="field-input date-input"/>
             <div class="param-tip">💡 Dica: altere para simular cenários em diferentes momentos (ex: 6 meses atrás, 1 ano no futuro).</div>
           </div>
         </div>
@@ -550,7 +435,6 @@ function etapaAnterior() {
               <span class="summary-val accent">{{ rodadas }}</span>
             </div>
           </div>
-
           <div class="estimates">
             <div class="estimate-item">
               <div class="estimate-icon">⏱</div>
@@ -574,11 +458,7 @@ function etapaAnterior() {
 
         <div class="step-nav">
           <button class="btn-back" @click="etapaAnterior">← Voltar</button>
-          <button
-            class="btn-create"
-            :disabled="!etapa3Valida || isLoading"
-            @click="criarSimulacao"
-          >
+          <button class="btn-create" :disabled="!etapa3Valida || isLoading" @click="criarSimulacao">
             <span v-if="isLoading" class="spinner"></span>
             <span v-else>✦</span>
             {{ isLoading ? 'Criando...' : 'Criar Simulação' }}
@@ -591,14 +471,7 @@ function etapaAnterior() {
 </template>
 
 <style scoped>
-.wizard-shell {
-  max-width: 720px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  padding-bottom: 60px;
-}
+.wizard-shell { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; padding-bottom: 60px; }
 .breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); }
 .bc-link { cursor: pointer; color: var(--text-secondary); transition: color 0.15s; }
 .bc-link:hover { color: var(--text-primary); }
