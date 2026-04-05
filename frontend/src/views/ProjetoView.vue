@@ -9,20 +9,29 @@ const route  = useRoute()
 const router = useRouter()
 const toast  = useToast()
 
-const projeto      = ref(null)
-const simulacoes   = ref([])
-const carregando   = ref(true)
+const projeto       = ref(null)
+const simulacoes    = ref([])
+const carregando    = ref(true)
 const confirmDelete = ref(false)
-const deletando    = ref(false)
+const deletando     = ref(false)
 
 // ─── Modal nova simulação ─────────────────────────────────────
 const modalAberto      = ref(false)
+const modalEtapa       = ref(1) // 1 = cenário, 2 = parâmetros
+const modalTitulo      = ref('')
+const modalCenario     = ref('')
+const modalHipotese    = ref('')
 const modalAgentes     = ref(50)
 const modalRodadas     = ref(20)
 const modalCriando     = ref(false)
-const modalHipotese    = ref('')
+const modalGerando     = ref(false)
 
 const projectId = computed(() => route.params.projectId)
+
+// ─── Validação modal ─────────────────────────────────────────
+const modalEtapa1Valida = computed(() =>
+  modalTitulo.value.trim().length >= 3 && modalHipotese.value.trim().length >= 10
+)
 
 // ─── Carregar dados ───────────────────────────────────────────
 async function carregar() {
@@ -35,10 +44,6 @@ async function carregar() {
     if (projRes.status === 'fulfilled') {
       const raw = projRes.value?.data || projRes.value
       projeto.value = raw?.data || raw
-      // Pré-preencher hipótese com a do projeto
-      if (projeto.value?.simulation_requirement) {
-        modalHipotese.value = projeto.value.simulation_requirement
-      }
     }
     if (simRes.status === 'fulfilled') {
       const raw = simRes.value?.data || simRes.value
@@ -52,29 +57,50 @@ async function carregar() {
   }
 }
 
-// ─── Excluir projeto ─────────────────────────────────────────
-async function excluir() {
-  deletando.value = true
-  try {
-    await service.delete(`/api/graph/project/${projectId.value}`)
-    toast.success('Projeto excluído com sucesso.')
-    router.push('/')
-  } catch (e) {
-    toast.error('Não foi possível excluir o projeto.')
-    deletando.value = false
-  }
-}
-
-// ─── Abrir modal nova simulação ───────────────────────────────
+// ─── Abrir modal ──────────────────────────────────────────────
 function abrirModal() {
   if (badgeProjeto(projeto.value).cls !== 'b-done') {
     toast.warn('O grafo ainda está sendo construído. Aguarde para criar uma simulação.')
     return
   }
-  modalAberto.value = true
+  // Resetar campos
+  modalEtapa.value    = 1
+  modalTitulo.value   = ''
+  modalCenario.value  = ''
+  modalHipotese.value = projeto.value?.simulation_requirement || ''
+  modalAgentes.value  = 50
+  modalRodadas.value  = 20
+  modalAberto.value   = true
 }
 
-// ─── Criar nova simulação no projeto existente ────────────────
+function fecharModal() {
+  if (modalCriando.value) return
+  modalAberto.value = false
+}
+
+// ─── Gerar hipótese com IA ────────────────────────────────────
+async function gerarHipotese() {
+  if (!modalCenario.value.trim()) return
+  modalGerando.value = true
+  try {
+    const res = await service.post('/api/graph/generate-hypothesis', {
+      cenario: modalCenario.value,
+      segmento: ''
+    })
+    const data = res.data || res
+    if (data.titulo)   modalTitulo.value   = data.titulo
+    if (data.hipotese) modalHipotese.value = data.hipotese
+    toast.success('Hipótese gerada com IA!')
+  } catch {
+    // Fallback local
+    if (!modalTitulo.value) modalTitulo.value = modalCenario.value.slice(0, 60)
+    modalHipotese.value = `Como ${modalCenario.value.toLowerCase()} vai impactar a opinião pública nos próximos meses?`
+  } finally {
+    modalGerando.value = false
+  }
+}
+
+// ─── Criar simulação no projeto existente ────────────────────
 async function criarNovaSimulacao() {
   if (!projeto.value?.graph_id) {
     toast.error('Grafo não encontrado. O projeto pode estar incompleto.')
@@ -82,21 +108,20 @@ async function criarNovaSimulacao() {
   }
   modalCriando.value = true
   try {
-    // Criar simulação diretamente usando o grafo existente
     const res = await service.post('/api/simulation/create', {
       project_id: projectId.value,
-      graph_id: projeto.value.graph_id
+      graph_id:   projeto.value.graph_id
     })
     const data = res.data?.data || res.data || res
     const simId = data.simulation_id
-
     if (!simId) throw new Error('simulation_id não retornado')
 
     modalAberto.value = false
     toast.success('Simulação criada! Preparando agentes...')
 
-    // Navegar para o pipeline com os parâmetros escolhidos
-    router.push(`/simulacao/${projectId.value}?agentes=${modalAgentes.value}&rodadas=${modalRodadas.value}&sim_id=${simId}`)
+    router.push(
+      `/simulacao/${projectId.value}?agentes=${modalAgentes.value}&rodadas=${modalRodadas.value}&sim_id=${simId}`
+    )
   } catch (e) {
     toast.error(e?.response?.data?.error || 'Erro ao criar simulação. Tente novamente.')
   } finally {
@@ -104,14 +129,27 @@ async function criarNovaSimulacao() {
   }
 }
 
+// ─── Excluir projeto ─────────────────────────────────────────
+async function excluir() {
+  deletando.value = true
+  try {
+    await service.delete(`/api/graph/project/${projectId.value}`)
+    toast.success('Projeto excluído com sucesso.')
+    router.push('/')
+  } catch {
+    toast.error('Não foi possível excluir o projeto.')
+    deletando.value = false
+  }
+}
+
 // ─── Helpers visuais ─────────────────────────────────────────
 function badgeProjeto(p) {
   if (!p) return { label: '', cls: 'b-draft' }
   const map = {
-    graph_completed:   { label: 'Pronto para simular', cls: 'b-done' },
-    graph_building:    { label: 'Construindo grafo',   cls: 'b-building' },
-    ontology_generated:{ label: 'Processando',        cls: 'b-building' },
-    failed:            { label: 'Erro',                cls: 'b-error' },
+    graph_completed:    { label: 'Pronto para simular', cls: 'b-done'     },
+    graph_building:     { label: 'Construindo grafo',   cls: 'b-building' },
+    ontology_generated: { label: 'Processando',         cls: 'b-building' },
+    failed:             { label: 'Erro',                cls: 'b-error'    },
   }
   return map[p.status] || { label: 'Criado', cls: 'b-draft' }
 }
@@ -119,57 +157,35 @@ function badgeProjeto(p) {
 function badgeSim(sim) {
   const s = sim.runner_status || sim.status
   const map = {
-    running:   { label: 'Em execução', cls: 'b-running' },
-    completed: { label: 'Concluída',   cls: 'b-done'    },
-    stopped:   { label: 'Parada',      cls: 'b-paused'  },
-    paused:    { label: 'Pausada',     cls: 'b-paused'  },
-    failed:    { label: 'Erro',        cls: 'b-error'   },
-    ready:     { label: 'Pronta',      cls: 'b-building'},
-    preparing: { label: 'Preparando',  cls: 'b-building'},
-    created:   { label: 'Criada',      cls: 'b-draft'   },
+    running:   { label: 'Em execução', cls: 'b-running'  },
+    completed: { label: 'Concluída',   cls: 'b-done'     },
+    stopped:   { label: 'Parada',      cls: 'b-paused'   },
+    paused:    { label: 'Pausada',     cls: 'b-paused'   },
+    failed:    { label: 'Erro',        cls: 'b-error'    },
+    ready:     { label: 'Pronta',      cls: 'b-building' },
+    preparing: { label: 'Preparando',  cls: 'b-building' },
+    created:   { label: 'Criada',      cls: 'b-draft'    },
   }
   return map[s] || { label: s || 'Rascunho', cls: 'b-draft' }
 }
 
 function acaoPrincipal(sim) {
   const s = sim.runner_status || sim.status
-  if (s === 'running') return {
-    label: '▶ Acompanhar ao vivo',
-    cls: 'btn-acao-running',
-    action: () => router.push(`/simulacao/${sim.simulation_id}/executar`)
-  }
-  if (sim.report_id) return {
-    label: '📊 Ver Relatório',
-    cls: 'btn-acao-report',
-    action: () => router.push(`/relatorio/${sim.report_id}`)
-  }
-  if (s === 'completed') return {
-    label: '📊 Ver Resultados',
-    cls: 'btn-acao-report',
-    action: () => router.push(`/simulacao/${sim.simulation_id}/executar`)
-  }
-  if (s === 'stopped' || s === 'paused') return {
-    label: '▶ Retomar',
-    cls: 'btn-acao',
-    action: () => router.push(`/simulacao/${sim.simulation_id}/executar`)
-  }
-  if (s === 'preparing' || s === 'ready') return {
-    label: '⚙️ Ver Pipeline',
-    cls: 'btn-acao',
-    action: () => router.push(`/simulacao/${projectId.value}`)
-  }
-  return {
-    label: 'Abrir',
-    cls: 'btn-acao',
-    action: () => router.push(`/simulacao/${projectId.value}`)
-  }
+  if (s === 'running')
+    return { label: '▶ Acompanhar ao vivo', cls: 'btn-acao-running', action: () => router.push(`/simulacao/${sim.simulation_id}/executar`) }
+  if (sim.report_id)
+    return { label: '📊 Ver Relatório',     cls: 'btn-acao-report',  action: () => router.push(`/relatorio/${sim.report_id}`) }
+  if (s === 'completed')
+    return { label: '📊 Ver Resultados',    cls: 'btn-acao-report',  action: () => router.push(`/simulacao/${sim.simulation_id}/executar`) }
+  if (s === 'stopped' || s === 'paused')
+    return { label: '▶ Retomar',            cls: 'btn-acao',         action: () => router.push(`/simulacao/${sim.simulation_id}/executar`) }
+  if (s === 'preparing' || s === 'ready')
+    return { label: '⚙️ Ver Pipeline',      cls: 'btn-acao',         action: () => router.push(`/simulacao/${projectId.value}`) }
+  return   { label: 'Abrir',               cls: 'btn-acao',         action: () => router.push(`/simulacao/${projectId.value}`) }
 }
 
 function acaoSecundaria(sim) {
-  if (sim.report_id) return {
-    label: '💬 Entrevistar',
-    action: () => router.push(`/agentes/${sim.report_id}`)
-  }
+  if (sim.report_id) return { label: '💬 Entrevistar', action: () => router.push(`/agentes/${sim.report_id}`) }
   return null
 }
 
@@ -245,7 +261,7 @@ onMounted(carregar)
       <!-- ─── CONFIRMAÇÃO EXCLUSÃO ─── -->
       <Transition name="slide">
         <div v-if="confirmDelete" class="confirm-box">
-          <span>⚠️ Excluir <strong>{{ projeto.name }}</strong> e todas as suas simulações? Esta ação é irreversível.</span>
+          <span>⚠️ Excluir <strong>{{ projeto.name }}</strong> e todas as simulações? Irreversível.</span>
           <div class="confirm-actions">
             <button class="btn-ghost" @click="confirmDelete = false">Cancelar</button>
             <button class="btn-delete-confirm" :disabled="deletando" @click="excluir">
@@ -258,14 +274,10 @@ onMounted(carregar)
       <!-- ─── SEÇÃO SIMULAÇÕES ─── -->
       <div class="section-header">
         <div class="section-title">Simulações</div>
-        <button
-          class="btn-nova-sim-sm"
+        <button class="btn-nova-sim-sm"
           :disabled="badgeProjeto(projeto).cls !== 'b-done'"
           @click="abrirModal"
-          :title="badgeProjeto(projeto).cls !== 'b-done' ? 'Aguarde o grafo ser construído' : ''"
-        >
-          + Nova Simulação
-        </button>
+        >+ Nova Simulação</button>
       </div>
 
       <!-- ─── ESTADO VAZIO ─── -->
@@ -273,23 +285,15 @@ onMounted(carregar)
         <div class="vazio-icon">🚀</div>
         <div class="vazio-titulo">Nenhuma simulação ainda</div>
         <div class="vazio-sub" v-if="badgeProjeto(projeto).cls === 'b-done'">
-          O grafo de conhecimento está pronto. Crie sua primeira simulação para prever como o mercado vai reagir.
-        </div>
-        <div class="vazio-sub" v-else-if="badgeProjeto(projeto).cls === 'b-building'">
-          <div class="building-info">
-            <div class="mini-spinner"></div>
-            O grafo de conhecimento ainda está sendo construído. Aguarde — isso pode levar alguns minutos.
-          </div>
+          O grafo está pronto! Crie sua primeira simulação para prever como o mercado vai reagir.
         </div>
         <div class="vazio-sub" v-else>
-          O projeto está sendo processado. Aguarde a conclusão para criar simulações.
+          <div class="building-info">
+            <div class="mini-spinner"></div>
+            O grafo de conhecimento está sendo construído. Aguarde alguns minutos.
+          </div>
         </div>
-        <button
-          v-if="badgeProjeto(projeto).cls === 'b-done'"
-          class="btn-nova-sim"
-          @click="abrirModal"
-          style="margin-top:20px"
-        >
+        <button v-if="badgeProjeto(projeto).cls === 'b-done'" class="btn-nova-sim" @click="abrirModal" style="margin-top:20px">
           ✦ Criar primeira simulação
         </button>
       </div>
@@ -302,10 +306,9 @@ onMounted(carregar)
           class="sim-card"
           :class="{
             'sim-running': (sim.runner_status || sim.status) === 'running',
-            'sim-done': (sim.runner_status || sim.status) === 'completed'
+            'sim-done':    (sim.runner_status || sim.status) === 'completed'
           }"
         >
-          <!-- Topo -->
           <div class="sim-top">
             <div class="sim-top-left">
               <span class="sim-num">#{{ simulacoes.length - idx }}</span>
@@ -313,33 +316,19 @@ onMounted(carregar)
               <span class="sim-data">{{ formatarData(sim.created_at) }}</span>
             </div>
             <div class="sim-top-right">
-              <button
-                v-if="acaoSecundaria(sim)"
-                class="btn-sec"
-                @click="acaoSecundaria(sim).action()"
-              >
+              <button v-if="acaoSecundaria(sim)" class="btn-sec" @click="acaoSecundaria(sim).action()">
                 {{ acaoSecundaria(sim).label }}
               </button>
-              <button
-                :class="['btn-acao', acaoPrincipal(sim).cls]"
-                @click="acaoPrincipal(sim).action()"
-              >
+              <button :class="['btn-acao', acaoPrincipal(sim).cls]" @click="acaoPrincipal(sim).action()">
                 {{ acaoPrincipal(sim).label }}
               </button>
             </div>
           </div>
 
-          <!-- Hipótese (se diferente do projeto) -->
-          <div
-            v-if="sim.simulation_requirement && sim.simulation_requirement !== projeto.simulation_requirement"
-            class="sim-hipotese"
-          >
-            {{ sim.simulation_requirement.length > 140
-              ? sim.simulation_requirement.slice(0,140) + '...'
-              : sim.simulation_requirement }}
+          <div v-if="sim.simulation_requirement && sim.simulation_requirement !== projeto.simulation_requirement" class="sim-hipotese">
+            {{ sim.simulation_requirement.length > 140 ? sim.simulation_requirement.slice(0,140)+'...' : sim.simulation_requirement }}
           </div>
 
-          <!-- Stats -->
           <div class="sim-stats">
             <div class="stat">
               <div class="stat-label">Agentes</div>
@@ -349,27 +338,20 @@ onMounted(carregar)
               <div class="stat-label">Rodadas</div>
               <div class="stat-val">{{ sim.current_round || 0 }}<span class="stat-total">/ {{ sim.total_rounds }}</span></div>
             </div>
-            <div class="stat" v-if="sim.posts_created || sim.twitter_actions_count">
+            <div class="stat" v-if="sim.posts_created">
               <div class="stat-label">Posts</div>
-              <div class="stat-val">{{ sim.posts_created || (sim.twitter_actions_count + (sim.reddit_actions_count || 0)) }}</div>
+              <div class="stat-val">{{ sim.posts_created }}</div>
             </div>
             <div class="stat" v-if="sim.report_id">
               <div class="stat-label">Relatório</div>
-              <div class="stat-val stat-link" @click="router.push(`/relatorio/${sim.report_id}`)">
-                Disponível →
-              </div>
+              <div class="stat-val stat-link" @click="router.push(`/relatorio/${sim.report_id}`)">Disponível →</div>
             </div>
           </div>
 
-          <!-- Barra de progresso -->
           <div v-if="sim.total_rounds" class="sim-prog-wrap">
             <div class="sim-prog-bar">
-              <div
-                class="sim-prog-fill"
-                :class="{
-                  'prog-running': (sim.runner_status || sim.status) === 'running',
-                  'prog-done': (sim.runner_status || sim.status) === 'completed'
-                }"
+              <div class="sim-prog-fill"
+                :class="{ 'prog-running': (sim.runner_status||sim.status)==='running', 'prog-done': (sim.runner_status||sim.status)==='completed' }"
                 :style="{ width: progresso(sim) + '%' }"
               ></div>
             </div>
@@ -379,34 +361,94 @@ onMounted(carregar)
       </div>
     </div>
 
-    <!-- ─── MODAL NOVA SIMULAÇÃO ─── -->
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <!-- MODAL NOVA SIMULAÇÃO                                       -->
+    <!-- ══════════════════════════════════════════════════════════ -->
     <Teleport to="body">
       <Transition name="modal">
-        <div v-if="modalAberto" class="modal-overlay" @click.self="modalAberto = false">
+        <div v-if="modalAberto" class="modal-overlay" @click.self="fecharModal">
           <div class="modal">
+
+            <!-- Header do modal -->
             <div class="modal-header">
               <div class="modal-titulo">Nova Simulação</div>
-              <div class="modal-sub">Configure os parâmetros para este projeto</div>
-              <button class="modal-close" @click="modalAberto = false">×</button>
+              <div class="modal-sub">Projeto: <strong>{{ projeto?.name }}</strong></div>
+              <button class="modal-close" @click="fecharModal">×</button>
             </div>
 
-            <div class="modal-body">
-              <!-- Projeto info -->
-              <div class="modal-projeto">
-                <span class="modal-projeto-label">Projeto:</span>
-                <span class="modal-projeto-nome">{{ projeto?.name }}</span>
+            <!-- Steps -->
+            <div class="modal-steps">
+              <div class="mstep" :class="{ active: modalEtapa === 1, done: modalEtapa > 1 }">
+                <div class="mstep-dot">
+                  <svg v-if="modalEtapa > 1" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.5" width="10" height="10"><polyline points="2,6 5,9 10,3"/></svg>
+                  <span v-else>1</span>
+                </div>
+                <span class="mstep-label">Hipótese</span>
+              </div>
+              <div class="mstep-line" :class="{ done: modalEtapa > 1 }"></div>
+              <div class="mstep" :class="{ active: modalEtapa === 2 }">
+                <div class="mstep-dot"><span>2</span></div>
+                <span class="mstep-label">Parâmetros</span>
+              </div>
+            </div>
+
+            <!-- ── ETAPA 1: Cenário + Hipótese ── -->
+            <div v-if="modalEtapa === 1" class="modal-body">
+
+              <!-- Título da simulação -->
+              <div class="modal-field">
+                <label class="modal-label">Título da simulação <span class="req">*</span></label>
+                <input
+                  v-model="modalTitulo"
+                  class="modal-input"
+                  type="text"
+                  placeholder="Ex: Teste com público premium, Versão B com 150 agentes"
+                  autofocus
+                />
+                <div class="modal-hint">Dê um nome para identificar esta simulação dentro do projeto.</div>
+              </div>
+
+              <!-- Descreva seu cenário -->
+              <div class="modal-field">
+                <label class="modal-label">Descreva seu cenário</label>
+                <textarea
+                  v-model="modalCenario"
+                  class="modal-textarea"
+                  rows="3"
+                  placeholder="Descreva o cenário que quer testar. Ex: E se reduzirmos o preço em 20%? Como o público feminino 30-45 vai reagir ao novo posicionamento?"
+                />
+                <button
+                  class="btn-gerar-ia"
+                  :disabled="!modalCenario.trim() || modalGerando"
+                  @click="gerarHipotese"
+                >
+                  <span v-if="modalGerando" class="spinner-sm"></span>
+                  <span v-else>✦</span>
+                  {{ modalGerando ? 'Gerando hipótese...' : 'Gerar hipótese com IA' }}
+                </button>
               </div>
 
               <!-- Hipótese -->
               <div class="modal-field">
-                <label class="modal-label">Hipótese</label>
+                <label class="modal-label">Hipótese de previsão <span class="req">*</span></label>
                 <textarea
                   v-model="modalHipotese"
                   class="modal-textarea"
                   rows="3"
-                  placeholder="Deixe em branco para usar a hipótese original do projeto"
+                  placeholder="Como X vai impactar Y nos próximos Z meses? (mínimo 10 caracteres)"
                 />
-                <div class="modal-hint">Opcional. Permite testar variações da hipótese original.</div>
+                <div class="modal-hint">A hipótese guia o comportamento de todos os agentes da simulação.</div>
+              </div>
+
+            </div>
+
+            <!-- ── ETAPA 2: Parâmetros ── -->
+            <div v-else-if="modalEtapa === 2" class="modal-body">
+
+              <!-- Resumo hipótese -->
+              <div class="modal-resumo">
+                <div class="resumo-label">📋 {{ modalTitulo }}</div>
+                <div class="resumo-hipotese">{{ modalHipotese.length > 100 ? modalHipotese.slice(0,100)+'...' : modalHipotese }}</div>
               </div>
 
               <!-- Agentes -->
@@ -417,8 +459,14 @@ onMounted(carregar)
                 </div>
                 <input type="range" min="5" max="500" step="5" v-model.number="modalAgentes" class="slider"/>
                 <div class="modal-bounds">
-                  <span>5 (rápido)</span>
-                  <span>500 (máxima riqueza)</span>
+                  <span>5 — teste rápido</span>
+                  <span>500 — máxima riqueza</span>
+                </div>
+                <div class="modal-desc-param">
+                  <span v-if="modalAgentes <= 20">Teste rápido — ideal para validar a hipótese</span>
+                  <span v-else-if="modalAgentes <= 100">Bom equilíbrio entre velocidade e precisão</span>
+                  <span v-else-if="modalAgentes <= 250">Alta fidelidade — captura nuances importantes</span>
+                  <span v-else>Máxima riqueza — simulação de alta complexidade</span>
                 </div>
               </div>
 
@@ -430,8 +478,14 @@ onMounted(carregar)
                 </div>
                 <input type="range" min="1" max="100" step="1" v-model.number="modalRodadas" class="slider"/>
                 <div class="modal-bounds">
-                  <span>1 (instantâneo)</span>
-                  <span>100 (evolução completa)</span>
+                  <span>1 — instantâneo</span>
+                  <span>100 — evolução completa</span>
+                </div>
+                <div class="modal-desc-param">
+                  <span v-if="modalRodadas <= 5">Reação imediata ao evento</span>
+                  <span v-else-if="modalRodadas <= 25">Captura tendências de curto prazo</span>
+                  <span v-else-if="modalRodadas <= 60">Evolução completa da opinião ao longo do tempo</span>
+                  <span v-else>Análise profunda — evolução de longo prazo</span>
                 </div>
               </div>
 
@@ -447,16 +501,34 @@ onMounted(carregar)
                   <span class="est-val">~${{ estimativaCusto }}</span>
                 </div>
               </div>
+
             </div>
 
+            <!-- Footer do modal -->
             <div class="modal-footer">
-              <button class="btn-ghost" @click="modalAberto = false">Cancelar</button>
-              <button class="btn-criar-sim" :disabled="modalCriando" @click="criarNovaSimulacao">
+              <button class="btn-ghost" @click="modalEtapa === 1 ? fecharModal() : modalEtapa--">
+                {{ modalEtapa === 1 ? 'Cancelar' : '← Voltar' }}
+              </button>
+              <button
+                v-if="modalEtapa === 1"
+                class="btn-proximo"
+                :disabled="!modalEtapa1Valida"
+                @click="modalEtapa = 2"
+              >
+                Próximo: Parâmetros →
+              </button>
+              <button
+                v-else
+                class="btn-criar-sim"
+                :disabled="modalCriando"
+                @click="criarNovaSimulacao"
+              >
                 <span v-if="modalCriando" class="spinner-sm"></span>
                 <span v-else>✦</span>
                 {{ modalCriando ? 'Criando...' : 'Iniciar Simulação' }}
               </button>
             </div>
+
           </div>
         </div>
       </Transition>
@@ -468,15 +540,13 @@ onMounted(carregar)
 .loading { display: flex; align-items: center; gap: 12px; padding: 48px; color: var(--text-muted); }
 .spinner { width: 20px; height: 20px; border: 2px solid var(--border-md); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-
 .not-found { text-align: center; padding: 64px 20px; }
-.nf-icon  { font-size: 48px; margin-bottom: 16px; }
-.nf-titulo{ font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; }
-.nf-sub   { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; }
-
+.nf-icon { font-size: 48px; margin-bottom: 16px; }
+.nf-titulo { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; }
+.nf-sub { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; }
 .page { display: flex; flex-direction: column; gap: 20px; }
 
-/* Header */
+/* Header projeto */
 .proj-header { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 24px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .proj-nome { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; letter-spacing: -0.4px; }
 .proj-meta { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -489,23 +559,20 @@ onMounted(carregar)
 .btn-nova-sim:hover:not(:disabled) { opacity: 0.85; }
 .btn-delete { background: none; border: 1px solid var(--border); color: var(--text-muted); border-radius: 8px; padding: 7px 10px; cursor: pointer; font-size: 14px; transition: all 0.15s; }
 .btn-delete:hover { border-color: var(--danger); color: var(--danger); }
-.btn-ghost { background: none; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 8px; padding: 8px 16px; font-size: 13px; cursor: pointer; transition: all 0.15s; }
+.btn-ghost { background: none; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; transition: all 0.15s; }
 .btn-ghost:hover { color: var(--text-primary); border-color: var(--border-md); }
 
-/* Confirm */
 .confirm-box { background: rgba(255,90,90,0.07); border: 1px solid rgba(255,90,90,0.25); border-radius: 10px; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 13px; color: var(--text-secondary); }
 .confirm-actions { display: flex; gap: 10px; flex-shrink: 0; }
 .btn-delete-confirm { background: var(--danger); color: #fff; border: none; border-radius: 6px; padding: 7px 16px; font-size: 12px; cursor: pointer; font-weight: 600; }
 .btn-delete-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* Section */
 .section-header { display: flex; align-items: center; justify-content: space-between; }
 .section-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
 .btn-nova-sim-sm { background: var(--accent2-dim); color: var(--accent2); border: 1px solid rgba(124,111,247,0.3); border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
 .btn-nova-sim-sm:hover:not(:disabled) { background: var(--accent2); color: #fff; }
 .btn-nova-sim-sm:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* Vazio */
 .sims-vazio { text-align: center; padding: 56px 20px; background: var(--bg-surface); border: 1px dashed var(--border-md); border-radius: 12px; }
 .vazio-icon { font-size: 44px; margin-bottom: 14px; }
 .vazio-titulo { font-size: 17px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; }
@@ -513,11 +580,10 @@ onMounted(carregar)
 .building-info { display: flex; align-items: center; gap: 10px; justify-content: center; }
 .mini-spinner { width: 14px; height: 14px; border: 2px solid var(--border-md); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
 
-/* Simulações */
 .sims-lista { display: flex; flex-direction: column; gap: 12px; }
 .sim-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; transition: border-color 0.2s; }
 .sim-card:hover { border-color: var(--border-md); }
-.sim-card.sim-running { border-color: rgba(245,166,35,0.4); box-shadow: 0 0 0 1px rgba(245,166,35,0.1); }
+.sim-card.sim-running { border-color: rgba(245,166,35,0.4); }
 .sim-card.sim-done    { border-color: rgba(0,229,195,0.2); }
 
 .sim-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 12px; }
@@ -550,61 +616,75 @@ onMounted(carregar)
 .sim-prog-fill { height: 100%; border-radius: 2px; transition: width 0.4s; background: var(--accent2); }
 .sim-prog-fill.prog-running { background: #f5a623; animation: shimmer 1.5s infinite; }
 .sim-prog-fill.prog-done    { background: var(--accent); }
-@keyframes shimmer { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+@keyframes shimmer { 0%,100%{opacity:1}50%{opacity:0.5} }
 .sim-prog-pct { font-size: 11px; color: var(--text-muted); min-width: 34px; text-align: right; font-family: var(--font-mono); }
 
-/* Badges */
 .badge { padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
-.b-done     { background: rgba(0,229,195,0.1);    color: var(--accent); }
-.b-running  { background: rgba(245,166,35,0.1);   color: #f5a623; }
-.b-paused   { background: rgba(124,111,247,0.1);  color: var(--accent2); }
-.b-building { background: rgba(124,111,247,0.1);  color: var(--accent2); }
-.b-error    { background: rgba(255,90,90,0.1);    color: var(--danger); }
+.b-done     { background: rgba(0,229,195,0.1);    color: var(--accent);   }
+.b-running  { background: rgba(245,166,35,0.1);   color: #f5a623;         }
+.b-paused   { background: rgba(124,111,247,0.1);  color: var(--accent2);  }
+.b-building { background: rgba(124,111,247,0.1);  color: var(--accent2);  }
+.b-error    { background: rgba(255,90,90,0.1);    color: var(--danger);   }
 .b-draft    { background: rgba(107,107,128,0.15); color: var(--text-muted); }
 
 /* ─── MODAL ─── */
-.modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.7);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 1000; padding: 20px; backdrop-filter: blur(4px);
-}
-.modal {
-  background: var(--bg-surface); border: 1px solid var(--border-md);
-  border-radius: 16px; width: 100%; max-width: 520px;
-  box-shadow: 0 24px 64px rgba(0,0,0,0.5);
-  display: flex; flex-direction: column;
-  max-height: 90vh; overflow: hidden;
-}
-.modal-header { padding: 20px 24px 0; position: relative; }
-.modal-titulo { font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
-.modal-sub    { font-size: 13px; color: var(--text-muted); margin-bottom: 0; }
-.modal-close  { position: absolute; top: 16px; right: 20px; background: none; border: none; color: var(--text-muted); font-size: 22px; cursor: pointer; line-height: 1; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.72); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; backdrop-filter: blur(4px); }
+.modal { background: var(--bg-surface); border: 1px solid var(--border-md); border-radius: 16px; width: 100%; max-width: 540px; box-shadow: 0 24px 64px rgba(0,0,0,0.5); display: flex; flex-direction: column; max-height: 92vh; overflow: hidden; }
+
+.modal-header { padding: 22px 24px 0; position: relative; flex-shrink: 0; }
+.modal-titulo { font-size: 18px; font-weight: 700; color: var(--text-primary); margin-bottom: 3px; }
+.modal-sub    { font-size: 12px; color: var(--text-muted); }
+.modal-close  { position: absolute; top: 18px; right: 20px; background: none; border: none; color: var(--text-muted); font-size: 22px; cursor: pointer; line-height: 1; transition: color 0.15s; }
 .modal-close:hover { color: var(--text-primary); }
 
-.modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; }
+/* Steps do modal */
+.modal-steps { display: flex; align-items: center; padding: 16px 24px 0; flex-shrink: 0; }
+.mstep { display: flex; align-items: center; gap: 8px; }
+.mstep-dot { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; background: var(--bg-raised); border: 2px solid var(--border-md); color: var(--text-muted); transition: all 0.3s; flex-shrink: 0; }
+.mstep.active .mstep-dot { background: var(--accent2); border-color: var(--accent2); color: #fff; }
+.mstep.done   .mstep-dot { background: var(--accent);  border-color: var(--accent);  color: #000; }
+.mstep-label { font-size: 12px; color: var(--text-muted); }
+.mstep.active .mstep-label { color: var(--accent2); font-weight: 500; }
+.mstep.done   .mstep-label { color: var(--text-secondary); }
+.mstep-line { flex: 1; height: 2px; background: var(--border-md); margin: 0 10px; transition: background 0.3s; }
+.mstep-line.done { background: var(--accent); }
 
-.modal-projeto { background: var(--bg-raised); border-radius: 8px; padding: 10px 14px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
-.modal-projeto-label { color: var(--text-muted); }
-.modal-projeto-nome  { color: var(--text-primary); font-weight: 500; }
+.modal-body { padding: 18px 24px; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; }
 
-.modal-field { display: flex; flex-direction: column; gap: 8px; }
+.modal-field { display: flex; flex-direction: column; gap: 7px; }
 .modal-label { font-size: 13px; font-weight: 500; color: var(--text-secondary); }
-.modal-textarea { background: var(--bg-raised); border: 1px solid var(--border-md); border-radius: 8px; color: var(--text-primary); font-size: 13px; padding: 10px 12px; outline: none; resize: vertical; font-family: inherit; line-height: 1.6; transition: border-color 0.15s; }
+.req { color: var(--accent); }
+.modal-input { background: var(--bg-raised); border: 1px solid var(--border-md); border-radius: 8px; color: var(--text-primary); font-size: 14px; padding: 10px 13px; outline: none; transition: border-color 0.15s; width: 100%; }
+.modal-input:focus { border-color: var(--accent2); }
+.modal-textarea { background: var(--bg-raised); border: 1px solid var(--border-md); border-radius: 8px; color: var(--text-primary); font-size: 13px; padding: 10px 13px; outline: none; resize: vertical; font-family: inherit; line-height: 1.6; transition: border-color 0.15s; }
 .modal-textarea:focus { border-color: var(--accent2); }
 .modal-hint { font-size: 11px; color: var(--text-muted); }
+
+.btn-gerar-ia { background: var(--accent2); color: #fff; border: none; border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; align-self: flex-start; }
+.btn-gerar-ia:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+.btn-gerar-ia:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.modal-resumo { background: var(--bg-raised); border-radius: 8px; padding: 12px 14px; border-left: 3px solid var(--accent2); }
+.resumo-label { font-size: 13px; font-weight: 600; color: var(--accent2); margin-bottom: 4px; }
+.resumo-hipotese { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
 .modal-slider-header { display: flex; justify-content: space-between; align-items: center; }
-.modal-val { font-size: 18px; font-weight: 700; font-family: var(--font-mono); color: var(--accent2); }
+.modal-val { font-size: 20px; font-weight: 700; font-family: var(--font-mono); color: var(--accent2); }
 .modal-bounds { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); }
+.modal-desc-param { font-size: 12px; color: var(--text-secondary); background: var(--bg-raised); border-radius: 6px; padding: 7px 12px; }
 .slider { width: 100%; accent-color: var(--accent2); cursor: pointer; }
 
 .modal-estimativas { background: var(--bg-raised); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: flex; }
 .est-item { flex: 1; padding: 12px 16px; }
 .est-label { font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px; }
-.est-val { font-size: 16px; font-weight: 700; color: var(--text-primary); font-family: var(--font-mono); }
+.est-val { font-size: 17px; font-weight: 700; color: var(--text-primary); font-family: var(--font-mono); }
 .est-sep { width: 1px; background: var(--border); margin: 8px 0; }
 
-.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-.btn-criar-sim { background: var(--accent); color: #000; border: none; border-radius: 10px; padding: 11px 24px; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
+.modal-footer { padding: 14px 24px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+.btn-proximo { background: var(--accent2); color: #fff; border: none; border-radius: 10px; padding: 10px 22px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.btn-proximo:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+.btn-proximo:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
+.btn-criar-sim { background: var(--accent); color: #000; border: none; border-radius: 10px; padding: 10px 22px; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
 .btn-criar-sim:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
 .btn-criar-sim:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
 .spinner-sm { width: 13px; height: 13px; border: 2px solid rgba(0,0,0,0.2); border-top-color: #000; border-radius: 50%; animation: spin 0.7s linear infinite; }
@@ -615,5 +695,5 @@ onMounted(carregar)
 .modal-enter-active { transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1); }
 .modal-leave-active { transition: all 0.2s ease; }
 .modal-enter-from   { opacity: 0; transform: scale(0.92); }
-.modal-leave-to     { opacity: 0; transform: scale(0.95); }
+.modal-leave-to     { opacity: 0; transform: scale(0.96); }
 </style>
