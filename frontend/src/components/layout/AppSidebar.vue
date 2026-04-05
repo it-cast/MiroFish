@@ -7,241 +7,276 @@ import service from '../../api'
 const route = useRoute()
 const router = useRouter()
 const projetos = ref([])
+const simulacoes = ref([])
+const carregando = ref(false)
 
-async function carregarProjetos() {
+async function carregarDados() {
+  carregando.value = true
   try {
-    const res = await service.get('/api/graph/project/list')
-    const raw = res.data || res
-    projetos.value = Array.isArray(raw) ? raw : (raw.data || raw.projects || raw.items || [])
+    const [projRes, simRes] = await Promise.allSettled([
+      service.get('/api/graph/project/list'),
+      service.get('/api/simulation/history', { params: { limit: 100 } })
+    ])
+    if (projRes.status === 'fulfilled') {
+      const raw = projRes.value?.data || projRes.value
+      projetos.value = (Array.isArray(raw) ? raw : (raw?.data || raw?.items || []))
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+    }
+    if (simRes.status === 'fulfilled') {
+      const raw = simRes.value?.data || simRes.value
+      simulacoes.value = Array.isArray(raw) ? raw : (raw?.data || raw?.history || [])
+    }
   } catch (e) {
     projetos.value = []
+  } finally {
+    carregando.value = false
   }
 }
 
-function statusDot(projeto) {
-  if (projeto.status === 'graph_completed') return 'dot-green'
-  if (projeto.status === 'graph_building') return 'dot-yellow'
+function ultimaSim(projectId) {
+  return simulacoes.value
+    .filter(s => s.project_id === projectId)
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0] || null
+}
+
+function dotClass(p) {
+  const sim = ultimaSim(p.project_id || p.id)
+  const s = sim ? (sim.runner_status || sim.status) : null
+  if (s === 'running') return 'dot-pulse'
+  if (s === 'completed') return 'dot-green'
+  if (p.status === 'graph_building') return 'dot-yellow'
+  if (p.status === 'graph_completed') return 'dot-green'
   return 'dot-gray'
 }
 
-function isProjetoAtivo(id) {
+function subLabel(p) {
+  const sim = ultimaSim(p.project_id || p.id)
+  if (!sim) return 'Sem simulações'
+  const s = sim.runner_status || sim.status
+  if (s === 'running') return `⏳ Rodada ${sim.current_round || 0}/${sim.total_rounds || '?'}`
+  if (s === 'completed') return '✅ Concluída'
+  if (s === 'stopped' || s === 'paused') return '⏸ Pausada'
+  if (s === 'failed') return '❌ Erro'
+  if (s === 'preparing' || s === 'ready') return '⚙️ Preparando'
+  return '📋 Iniciada'
+}
+
+function isAtivo(id) {
   return route.path === `/projeto/${id}`
 }
 
-function isAtivo(path) {
-  return route.path === path || route.path.startsWith(path + '/')
-}
-
-onMounted(carregarProjetos)
-
-// Recarregar projetos ao navegar
-watch(() => route.path, () => {
-  if (route.path === '/' || route.path.startsWith('/projeto')) {
-    carregarProjetos()
-  }
-})
+onMounted(carregarDados)
+watch(() => route.path, () => { carregarDados() })
 </script>
 
 <template>
   <aside class="sidebar">
-    <!-- Logo -->
-    <div class="brand">
+
+    <div class="brand" @click="router.push('/')">
       <img :src="logoPath" alt="AUGUR" />
-      <div>
+      <div class="brand-text">
         <strong>AUGUR</strong>
         <small>by itcast</small>
       </div>
     </div>
 
-    <!-- Botão novo projeto -->
-    <div class="novo-btn-wrap">
-      <button class="novo-btn" @click="router.push('/novo')">
-        <span class="novo-icon">+</span>
-        Nova Simulação
+    <div class="novo-wrap">
+      <button class="btn-novo" @click="router.push('/projeto/novo')">
+        <span class="plus">+</span>
+        <span class="label">Novo Projeto</span>
       </button>
     </div>
 
-    <!-- Lista de projetos -->
-    <div class="section">
-      <p class="section-title">PROJETOS</p>
+    <div class="nav-section">
+      <div class="nav-label">PROJETOS</div>
 
-      <div v-if="projetos.length === 0" class="sem-projetos">
+      <div v-if="carregando" class="nav-loading">
+        <div class="mini-spinner"></div>
+      </div>
+
+      <div v-else-if="projetos.length === 0" class="nav-empty">
         Nenhum projeto ainda
       </div>
 
-      <button
+      <div
         v-for="p in projetos"
         :key="p.project_id || p.id"
-        class="projeto-item"
-        :class="{ active: isProjetoAtivo(p.project_id || p.id) }"
+        class="nav-item"
+        :class="{ active: isAtivo(p.project_id || p.id) }"
         @click="router.push(`/projeto/${p.project_id || p.id}`)"
       >
-        <span :class="['dot', statusDot(p)]"></span>
-        <span class="projeto-nome">{{ p.name || 'Sem nome' }}</span>
-      </button>
+        <div class="item-row">
+          <span :class="['dot', dotClass(p)]"></span>
+          <span class="item-nome">{{ p.name || 'Sem nome' }}</span>
+        </div>
+        <div class="item-sub">{{ subLabel(p) }}</div>
+      </div>
     </div>
 
-    <!-- Footer fixo -->
     <div class="sidebar-footer">
-      <button
-        class="footer-item"
-        :class="{ active: isAtivo('/configuracoes') }"
-        @click="router.push('/')"
-      >
-        Dashboard
-      </button>
-      <div class="workspace-label">Workspace</div>
+      <div class="footer-sep"></div>
+      <div class="footer-link" @click="router.push('/')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13">
+          <rect x="1" y="1" width="6" height="6" rx="1"/>
+          <rect x="9" y="1" width="6" height="6" rx="1"/>
+          <rect x="1" y="9" width="6" height="6" rx="1"/>
+          <rect x="9" y="9" width="6" height="6" rx="1"/>
+        </svg>
+        <span>Dashboard</span>
+      </div>
+      <div class="footer-workspace">Workspace</div>
     </div>
+
   </aside>
 </template>
 
 <style scoped>
 .sidebar {
-  width: 220px;
+  width: 230px;
   flex-shrink: 0;
   background: var(--bg-surface);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  height: 100vh;
   overflow: hidden;
 }
 
 .brand {
   display: flex;
-  gap: 10px;
   align-items: center;
+  gap: 10px;
   padding: 16px 14px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.15s;
 }
-.brand img { width: 32px; height: 32px; }
-.brand strong { display: block; font-size: 14px; color: var(--text-primary); }
-.brand small { color: var(--text-muted); font-size: 11px; }
+.brand:hover { background: var(--bg-raised); }
+.brand img { width: 32px; height: 32px; border-radius: 8px; }
+.brand-text strong { display: block; font-size: 14px; color: var(--text-primary); }
+.brand-text small { color: var(--text-muted); font-size: 10px; letter-spacing: 0.5px; }
 
-.novo-btn-wrap { padding: 12px 10px 8px; flex-shrink: 0; }
-.novo-btn {
+.novo-wrap { padding: 12px 10px 6px; flex-shrink: 0; }
+.btn-novo {
   width: 100%;
   background: var(--accent);
   color: #000;
   border: none;
   border-radius: 8px;
-  padding: 9px 12px;
+  padding: 9px 14px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
   transition: opacity 0.15s;
 }
-.novo-btn:hover { opacity: 0.85; }
-.novo-icon { font-size: 16px; font-weight: 400; }
+.btn-novo:hover { opacity: 0.85; }
+.plus { font-size: 18px; font-weight: 300; line-height: 1; }
 
-.section {
+.nav-section {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 10px 0;
-}
-.section-title {
-  font-size: 10px;
-  color: var(--text-muted);
-  letter-spacing: 1px;
-  padding: 8px 6px 6px;
-  margin: 0;
+  padding: 4px 8px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-md) transparent;
 }
 
-.sem-projetos {
+.nav-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 1.2px;
+  padding: 10px 6px 6px;
+  font-weight: 500;
+}
+
+.nav-loading { padding: 10px 6px; }
+.mini-spinner {
+  width: 14px; height: 14px;
+  border: 2px solid var(--border-md);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.nav-empty {
   font-size: 12px;
   color: var(--text-muted);
   padding: 8px 6px;
   font-style: italic;
 }
 
-.projeto-item {
-  width: 100%;
-  background: none;
-  border: none;
+.nav-item {
+  padding: 8px 8px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
   border-left: 2px solid transparent;
-  border-radius: 0 6px 6px 0;
-  padding: 8px 10px;
+  margin-bottom: 1px;
+}
+.nav-item:hover { background: var(--bg-raised); }
+.nav-item.active {
+  background: var(--accent-dim);
+  border-left-color: var(--accent);
+}
+
+.item-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  color: var(--text-secondary);
-  font-size: 13px;
-  text-align: left;
-  transition: all 0.15s;
-  margin-bottom: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  gap: 7px;
+  margin-bottom: 3px;
 }
-.projeto-item:hover {
-  background: var(--bg-raised);
-  color: var(--text-primary);
-}
-.projeto-item.active {
-  border-left-color: var(--accent);
-  background: var(--accent-dim);
-  color: var(--accent);
-}
-
-.projeto-nome {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Status dots */
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.dot-green { background: var(--accent); }
-.dot-yellow {
-  background: #f5a623;
-  animation: pulse 1.5s infinite;
-}
-.dot-gray { background: var(--text-muted); opacity: 0.5; }
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
-
-.sidebar-footer {
-  flex-shrink: 0;
-  border-top: 1px solid var(--border);
-  padding: 10px;
-}
-.footer-item {
-  width: 100%;
-  background: none;
-  border: none;
-  color: var(--text-muted);
+.item-nome {
   font-size: 12px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.15s;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
 }
-.footer-item:hover { background: var(--bg-raised); color: var(--text-primary); }
-.footer-item.active { color: var(--accent); }
-.workspace-label {
-  font-size: 11px;
+.nav-item.active .item-nome { color: var(--accent); }
+.item-sub {
+  font-size: 10px;
   color: var(--text-muted);
-  padding: 6px 8px 2px;
+  padding-left: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
+.dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.dot-green { background: var(--accent); }
+.dot-yellow { background: #f5a623; }
+.dot-gray { background: var(--text-muted); opacity: 0.35; }
+.dot-pulse {
+  background: #f5a623;
+  animation: pulse 1.4s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(245,166,35,0.5); }
+  50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(245,166,35,0); }
+}
+
+.sidebar-footer { flex-shrink: 0; padding: 8px 10px 12px; }
+.footer-sep { height: 1px; background: var(--border); margin-bottom: 8px; }
+.footer-link {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text-muted);
+  padding: 6px; border-radius: 6px; cursor: pointer; transition: all 0.15s;
+}
+.footer-link:hover { background: var(--bg-raised); color: var(--text-primary); }
+.footer-workspace { font-size: 11px; color: var(--text-muted); padding: 3px 6px; opacity: 0.5; }
 
 @media (max-width: 768px) {
-  .sidebar { width: 60px; }
-  .brand div, .section-title, .projeto-nome, .sem-projetos,
-  .novo-btn span:last-child, .workspace-label, .footer-item { display: none; }
-  .novo-btn { justify-content: center; padding: 9px; }
-  .projeto-item { justify-content: center; padding: 8px; }
+  .sidebar { width: 56px; }
+  .brand-text, .label, .nav-label, .item-nome, .item-sub,
+  .nav-empty, .footer-link span, .footer-workspace { display: none; }
+  .btn-novo { justify-content: center; padding: 9px; }
+  .nav-item { display: flex; justify-content: center; padding: 10px 4px; }
+  .item-row { justify-content: center; }
 }
 </style>
