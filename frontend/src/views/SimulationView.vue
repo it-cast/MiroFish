@@ -9,7 +9,7 @@ const route = useRoute()
 const router = useRouter()
 
 // ─── Estado do pipeline ───
-const phase = ref('init') // init → building_graph → creating_sim → preparing → starting → running → error
+const phase = ref('init')
 const error = ref('')
 const progress = ref(0)
 const statusMsg = ref('Iniciando...')
@@ -34,6 +34,39 @@ const phaseLabels = {
 
 const phaseLabel = computed(() => phaseLabels[phase.value] || phase.value)
 
+// ─── Tradução de mensagens do backend ───
+function traduzirMensagem(msg) {
+  if (!msg) return 'Processando...'
+  // Se contém caracteres chineses, substituir
+  if (/[\u4e00-\u9fff]/.test(msg)) return 'Processando...'
+  const map = [
+    ['building', 'Construindo grafo de conhecimento...'],
+    ['entity', 'Extraindo entidades e relacionamentos...'],
+    ['chunk', 'Processando chunks do documento...'],
+    ['batch', 'Processando lote de dados...'],
+    ['completed', 'Concluído!'],
+    ['failed', 'Falhou'],
+    ['preparing', 'Preparando agentes...'],
+    ['generating', 'Gerando perfis dos agentes com IA...'],
+    ['profile', 'Criando perfil do agente...'],
+    ['ready', 'Pronto para iniciar!'],
+    ['graph', 'Processando grafo de conhecimento...'],
+    ['sending', 'Enviando dados...'],
+    ['processing', 'Processando...'],
+    ['loading', 'Carregando...'],
+    ['starting', 'Iniciando...'],
+    ['waiting', 'Aguardando...'],
+    ['analyzing', 'Analisando documentos...'],
+    ['extracting', 'Extraindo informações...'],
+    ['creating', 'Criando estrutura de simulação...'],
+  ]
+  const lower = msg.toLowerCase()
+  for (const [key, val] of map) {
+    if (lower.includes(key)) return val
+  }
+  return msg
+}
+
 // ─── Pipeline principal ───
 onMounted(async () => {
   try {
@@ -50,7 +83,6 @@ onUnmounted(() => {
 async function runPipeline() {
   const projectId = route.params.projectId
 
-  // 1. Buscar dados do projeto (inclui task_id do graph build)
   phase.value = 'building_graph'
   statusMsg.value = 'Verificando construção do grafo...'
   progress.value = 5
@@ -58,20 +90,16 @@ async function runPipeline() {
   const project = await getProject(projectId)
   projectData.value = project
 
-  // 2. Se o grafo ainda está construindo, esperar
   if (project.status === 'graph_building' && project.graph_build_task_id) {
     statusMsg.value = 'Construindo grafo de conhecimento no Zep...'
     await waitForGraphBuild(project.graph_build_task_id, projectId)
   } else if (project.status === 'ontology_generated') {
-    // Graph build pode não ter sido iniciado ainda — raro mas possível
     statusMsg.value = 'Grafo ainda não iniciado. Verifique o wizard.'
     phase.value = 'error'
     error.value = 'O build do grafo não foi iniciado. Volte ao wizard e tente novamente.'
     return
   }
-  // Se já está graph_completed, prosseguir
 
-  // Buscar projeto atualizado para pegar graph_id
   const updatedProject = await getProject(projectId)
   projectData.value = updatedProject
 
@@ -81,7 +109,6 @@ async function runPipeline() {
     return
   }
 
-  // 3. Criar simulação
   phase.value = 'creating_sim'
   statusMsg.value = 'Criando registro da simulação...'
   progress.value = 45
@@ -89,7 +116,6 @@ async function runPipeline() {
   const simData = await createSimulation(projectId, updatedProject.graph_id)
   simulationId.value = simData.simulation_id
 
-  // 4. Preparar simulação (gera perfis dos agentes via LLM)
   phase.value = 'preparing'
   statusMsg.value = 'Gerando perfis dos agentes com IA...'
   progress.value = 50
@@ -104,14 +130,12 @@ async function runPipeline() {
     await waitForPrepare(prepareResult.task_id, simData.simulation_id)
   }
 
-  // 5. Iniciar simulação
   phase.value = 'starting'
   statusMsg.value = 'Lançando simulação...'
   progress.value = 90
 
   await startSimulation(simData.simulation_id)
 
-  // 6. Navegar para a tela de execução
   phase.value = 'running'
   statusMsg.value = 'Simulação rodando! Redirecionando...'
   progress.value = 100
@@ -157,7 +181,7 @@ async function startSimulation(simId) {
 function waitForGraphBuild(taskId, projectId) {
   return new Promise((resolve, reject) => {
     let elapsed = 0
-    const maxWait = 600000 // 10 minutos
+    const maxWait = 600000
     const interval = 5000
 
     pollTimer = setInterval(async () => {
@@ -169,15 +193,14 @@ function waitForGraphBuild(taskId, projectId) {
           return
         }
 
-        // Verificar task
         const res = await service.get(`/api/graph/task/${taskId}`)
         const task = res.data || res
 
         if (task.progress) {
-          progress.value = 5 + Math.round((task.progress / 100) * 35) // 5% → 40%
+          progress.value = 5 + Math.round((task.progress / 100) * 35)
         }
         if (task.message) {
-          statusMsg.value = task.message
+          statusMsg.value = traduzirMensagem(task.message)
         }
 
         if (task.status === 'completed') {
@@ -185,10 +208,9 @@ function waitForGraphBuild(taskId, projectId) {
           resolve()
         } else if (task.status === 'failed') {
           clearInterval(pollTimer)
-          reject(new Error(task.error || task.message || 'Falha na construção do grafo.'))
+          reject(new Error(traduzirMensagem(task.error || task.message) || 'Falha na construção do grafo.'))
         }
       } catch (e) {
-        // Também checar se o projeto já completou (fallback)
         try {
           const proj = await getProject(projectId)
           if (proj.status === 'graph_completed') {
@@ -196,7 +218,7 @@ function waitForGraphBuild(taskId, projectId) {
             resolve()
             return
           }
-        } catch (_) { /* ignorar */ }
+        } catch (_) { }
       }
     }, interval)
   })
@@ -205,7 +227,7 @@ function waitForGraphBuild(taskId, projectId) {
 function waitForPrepare(taskId, simId) {
   return new Promise((resolve, reject) => {
     let elapsed = 0
-    const maxWait = 600000 // 10 minutos
+    const maxWait = 600000
     const interval = 5000
 
     pollTimer = setInterval(async () => {
@@ -224,10 +246,10 @@ function waitForPrepare(taskId, simId) {
         const data = res.data || res
 
         if (data.progress) {
-          progress.value = 50 + Math.round((data.progress / 100) * 35) // 50% → 85%
+          progress.value = 50 + Math.round((data.progress / 100) * 35)
         }
         if (data.message) {
-          statusMsg.value = data.message
+          statusMsg.value = traduzirMensagem(data.message)
         }
 
         if (data.status === 'ready' || data.status === 'completed' || data.already_prepared) {
@@ -235,7 +257,7 @@ function waitForPrepare(taskId, simId) {
           resolve()
         } else if (data.status === 'failed') {
           clearInterval(pollTimer)
-          reject(new Error(data.message || 'Falha na preparação da simulação.'))
+          reject(new Error(traduzirMensagem(data.message) || 'Falha na preparação da simulação.'))
         }
       } catch (e) {
         console.warn('Erro ao verificar prepare status:', e)
@@ -263,7 +285,6 @@ function retry() {
 <template>
   <AppShell title="Preparando Simulação">
     <div class="pipeline-container">
-      <!-- Progress visual -->
       <div class="progress-wrapper">
         <div class="progress-bar">
           <div class="progress-fill" :style="{ width: progress + '%' }" :class="{ error: phase === 'error' }"></div>
@@ -271,7 +292,6 @@ function retry() {
         <span class="progress-pct">{{ progress }}%</span>
       </div>
 
-      <!-- Phase indicator -->
       <div class="phase-card">
         <div class="phase-icon" :class="phase">
           <svg v-if="phase === 'error'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -282,12 +302,10 @@ function retry() {
           </svg>
           <div v-else class="spinner"></div>
         </div>
-
         <h2>{{ phaseLabel }}</h2>
         <p class="status-msg">{{ statusMsg }}</p>
       </div>
 
-      <!-- Steps timeline -->
       <div class="steps">
         <div class="step" :class="{ active: phase === 'building_graph', done: ['creating_sim','preparing','starting','running'].includes(phase) }">
           <div class="step-dot"></div>
@@ -310,7 +328,6 @@ function retry() {
         </div>
       </div>
 
-      <!-- Error state -->
       <div v-if="phase === 'error'" class="error-box">
         <p>{{ error }}</p>
         <div class="error-actions">
@@ -319,7 +336,6 @@ function retry() {
         </div>
       </div>
 
-      <!-- Project info -->
       <div v-if="projectData" class="info-card">
         <h4>Projeto</h4>
         <div class="info-row"><span>Nome</span><span>{{ projectData.name }}</span></div>
@@ -332,135 +348,34 @@ function retry() {
 </template>
 
 <style scoped>
-.pipeline-container {
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 32px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.progress-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.progress-bar {
-  flex: 1;
-  height: 8px;
-  background: var(--bg-overlay);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.progress-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 999px;
-  transition: width 0.5s ease;
-}
+.pipeline-container { max-width: 600px; margin: 0 auto; padding: 32px 0; display: flex; flex-direction: column; gap: 24px; }
+.progress-wrapper { display: flex; align-items: center; gap: 12px; }
+.progress-bar { flex: 1; height: 8px; background: var(--bg-overlay); border-radius: 999px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.5s ease; }
 .progress-fill.error { background: var(--danger); }
-.progress-pct {
-  font-size: 13px;
-  color: var(--text-secondary);
-  min-width: 40px;
-  text-align: right;
-}
-
-.phase-card {
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 32px;
-  text-align: center;
-}
-.phase-card h2 {
-  margin: 16px 0 8px;
-  font-size: 20px;
-}
-.status-msg {
-  color: var(--text-secondary);
-  font-size: 14px;
-  margin: 0;
-}
-
-.phase-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--accent-dim);
-  color: var(--accent);
-}
+.progress-pct { font-size: 13px; color: var(--text-secondary); min-width: 40px; text-align: right; }
+.phase-card { background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 32px; text-align: center; }
+.phase-card h2 { margin: 16px 0 8px; font-size: 20px; }
+.status-msg { color: var(--text-secondary); font-size: 14px; margin: 0; }
+.phase-icon { display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 50%; background: var(--accent-dim); color: var(--accent); }
 .phase-icon.error { background: rgba(255,90,90,0.12); color: var(--danger); }
 .phase-icon.running { background: var(--accent-dim); color: var(--accent); }
 .phase-icon svg { width: 28px; height: 28px; }
-
-.spinner {
-  width: 28px; height: 28px;
-  border: 3px solid var(--accent-dim);
-  border-top: 3px solid var(--accent);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
+.spinner { width: 28px; height: 28px; border: 3px solid var(--accent-dim); border-top: 3px solid var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-
-/* Steps timeline */
-.steps {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-}
-.step {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  position: relative;
-}
-.step span {
-  font-size: 11px;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-.step-dot {
-  width: 14px; height: 14px;
-  border-radius: 50%;
-  background: var(--bg-overlay);
-  border: 2px solid var(--border-md);
-  transition: all var(--t-mid);
-}
+.steps { display: flex; align-items: center; justify-content: center; gap: 0; }
+.step { display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative; }
+.step span { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.step-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--bg-overlay); border: 2px solid var(--border-md); transition: all var(--t-mid); }
 .step.active .step-dot { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 10px rgba(0,229,195,0.4); }
 .step.active span { color: var(--accent); }
 .step.done .step-dot { border-color: var(--accent); background: var(--accent); }
 .step.done span { color: var(--text-secondary); }
-.step-line {
-  width: 40px; height: 2px;
-  background: var(--border-md);
-  margin: 0 4px;
-  margin-bottom: 20px;
-}
-
-/* Error */
-.error-box {
-  background: rgba(255,90,90,0.08);
-  border: 1px solid rgba(255,90,90,0.25);
-  border-radius: var(--r-md);
-  padding: 16px;
-}
+.step-line { width: 40px; height: 2px; background: var(--border-md); margin: 0 4px; margin-bottom: 20px; }
+.error-box { background: rgba(255,90,90,0.08); border: 1px solid rgba(255,90,90,0.25); border-radius: var(--r-md); padding: 16px; }
 .error-box p { color: var(--danger); font-size: 14px; margin: 0 0 12px; }
 .error-actions { display: flex; gap: 12px; justify-content: flex-end; }
-
-/* Info card */
-.info-card {
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  padding: 16px;
-}
+.info-card { background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--r-md); padding: 16px; }
 .info-card h4 { margin: 0 0 12px; font-size: 14px; color: var(--text-secondary); }
 .info-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; border-bottom: 1px solid var(--border); }
 .info-row:last-child { border-bottom: none; }
