@@ -792,10 +792,10 @@ function abrirChat() {
           <svg viewBox="0 0 220 220" class="radar-svg" preserveAspectRatio="xMidYMid meet">
             <polygon :points="pts(radarData.grid100)" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1"/>
             <polygon :points="pts(radarData.grid75)" fill="none" stroke="rgba(0,0,0,0.06)" stroke-width="1"/>
-            <polygon :points="pts(radarData.grid50)" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-            <polygon :points="pts(radarData.grid25)" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
-            <line v-for="ax in radarData.axes" :key="ax.label" :x1="ax.x1" :y1="ax.y1" :x2="ax.x2" :y2="ax.y2" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-            <text v-for="ax in radarData.axes" :key="ax.label+'l'" :x="ax.lx" :y="ax.ly" text-anchor="middle" dominant-baseline="middle" fill="rgba(255,255,255,0.45)" font-size="9">{{ ax.label }}</text>
+            <polygon :points="pts(radarData.grid50)" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="1"/>
+            <polygon :points="pts(radarData.grid25)" fill="none" stroke="rgba(0,0,0,0.06)" stroke-width="1"/>
+            <line v-for="ax in radarData.axes" :key="ax.label" :x1="ax.x1" :y1="ax.y1" :x2="ax.x2" :y2="ax.y2" stroke="rgba(0,0,0,0.12)" stroke-width="1"/>
+            <text v-for="ax in radarData.axes" :key="ax.label+'l'" :x="ax.lx" :y="ax.ly" text-anchor="middle" dominant-baseline="middle" fill="rgba(0,0,0,0.45)" font-size="9">{{ ax.label }}</text>
             <polygon :points="pts(radarData.data)" fill="rgba(0,229,195,0.15)" stroke="#00e5c3" stroke-width="2"/>
             <circle v-for="(pt,i) in radarData.data" :key="i" :cx="pt.x" :cy="pt.y" r="3" fill="#00e5c3"/>
           </svg>
@@ -1211,7 +1211,7 @@ function abrirChat() {
 .cen-nome { font-size:14px;font-weight:700;color:var(--text-primary);line-height:1.3; }
 .cen-desc { font-size:12px;color:var(--text-muted);line-height:1.6; }
 .cen-impacto { font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0; }
-.cen-prob-bar { height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden; }
+.cen-prob-bar { height:5px;background:rgba(0,0,0,0.06);border-radius:3px;overflow:hidden; }
 .cpb-fill { height:100%;border-radius:3px; }
 .cen-probval { font-size:12px;color:var(--text-muted); }
 
@@ -1363,7 +1363,7 @@ function abrirChat() {
 .hm-lbl:nth-child(3) { top:72px; }
 .hm-grid { display:flex;flex-direction:column;gap:4px; }
 .hm-row { display:flex;gap:3px; }
-.hm-cell { height:32px;flex:1;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:rgba(255,255,255,0.8);min-width:24px;cursor:default;transition:transform .1s; }
+.hm-cell { height:32px;flex:1;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;min-width:24px;cursor:default;transition:transform .1s; }
 .hm-cell:hover { transform:scale(1.1);z-index:1; }
 .hm-cell span { text-shadow:0 1px 2px rgba(0,0,0,0.5); }
 .hm-rounds { display:flex;gap:3px;margin-top:2px; }
