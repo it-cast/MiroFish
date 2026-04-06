@@ -11,8 +11,7 @@ const report     = ref(null)
 const analytics  = ref(null)
 const carregando = ref(true)
 const erro       = ref('')
-// Accordion: qual seção está aberta (null = todas abertas na versão desktop)
-const secaoAberta = ref(null)
+const deepTab    = ref(0)
 
 onMounted(async () => {
   carregando.value = true
@@ -44,49 +43,83 @@ const geradoEm = computed(() => {
   return new Date(d).toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })
 })
 
+// ─── Categorizar seções por tipo ──────────────────────────────
+function categ(title) {
+  const t = (title || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+  if (t.includes('resumo')) return 'resumo'
+  if (t.includes('cenario')) return 'cenarios'
+  if (t.includes('risco')) return 'riscos'
+  if (t.includes('recomend')) return 'recomendacoes'
+  if (t.includes('previs')) return 'previsoes'
+  if (t.includes('insight')) return 'insights'
+  if (t.includes('mapa') && t.includes('forca')) return 'deep_mapa'
+  if (t.includes('cronolog')) return 'deep_crono'
+  if (t.includes('padro')) return 'deep_padroes'
+  if (t.includes('hipotes')) return 'deep_hipoteses'
+  if (t.includes('anomal')) return 'deep_anomalias'
+  if (t.includes('timeline') || t.includes('linha do tempo')) return 'timeline'
+  return 'generic'
+}
+
+// Seções organizadas por categoria
+const secResumo = computed(() => secoes.value.find(s => categ(s.title) === 'resumo') || secoes.value[0])
+const secCenarios = computed(() => secoes.value.find(s => categ(s.title) === 'cenarios') || secoes.value[1])
+const secRiscos = computed(() => secoes.value.find(s => categ(s.title) === 'riscos'))
+const secRecomendacoes = computed(() => secoes.value.find(s => categ(s.title) === 'recomendacoes'))
+const secPrevisoes = computed(() => secoes.value.find(s => categ(s.title) === 'previsoes'))
+const secInsights = computed(() => secoes.value.find(s => categ(s.title) === 'insights'))
+
+const deepSections = computed(() => {
+  const types = ['deep_mapa','deep_crono','deep_padroes','deep_hipoteses','deep_anomalias']
+  const icons = ['🏛','📡','🔄','🔬','🧩']
+  const labels = ['Mapa de Forças','Cronologia Causal','Padrões Emergentes','Hipóteses Causais','Anomalias']
+  const found = []
+  secoes.value.forEach(s => {
+    const c = categ(s.title)
+    const idx = types.indexOf(c)
+    if (idx >= 0) found.push({ ...s, icon: icons[idx], label: labels[idx], sortIdx: idx })
+  })
+  found.sort((a,b) => a.sortIdx - b.sortIdx)
+  return found
+})
+
+// Seções genéricas (que não foram categorizadas)
+const genericSections = computed(() => {
+  const knownTypes = ['resumo','cenarios','riscos','recomendacoes','previsoes','insights',
+    'deep_mapa','deep_crono','deep_padroes','deep_hipoteses','deep_anomalias','timeline']
+  return secoes.value.filter(s => !knownTypes.includes(categ(s.title)))
+})
+
 // ─── Analytics ────────────────────────────────────────────────
 const rounds       = computed(() => analytics.value?.combined?.rounds || [])
 const twTotals     = computed(() => analytics.value?.twitter?.totals  || {})
 const rdTotals     = computed(() => analytics.value?.reddit?.totals   || {})
 const twTopAgents  = computed(() => analytics.value?.twitter?.top_agents || [])
-const twEngagement = computed(() => analytics.value?.twitter?.engagement || [])
 const totalAcoes   = computed(() => analytics.value?.combined?.total_interactions || 0)
 const totalRodadas = computed(() => analytics.value?.combined?.total_rounds || rounds.value.length || 0)
-const peakRound    = computed(() => analytics.value?.combined?.peak_round || {})
 
 // ─── PARSERS ─────────────────────────────────────────────────
 
-// 1. Confiança: primeiro número grande no resumo executivo
+// Confiança
 const confianca = computed(() => {
-  const src = (secoes.value[0]?.content || '') + ' ' + (report.value?.outline?.summary || '')
+  const src = (secResumo.value?.content || '') + ' ' + (report.value?.outline?.summary || '')
   const m = src.match(/(\d{2,3})\s*%/)
   return m ? Math.min(parseInt(m[1]), 99) : 72
 })
 
-// 2. Badges de contagem
-const countBadges = computed(() => {
-  const s = secoes.value
-  return [
-    { label: 'Cenários',   val: 3,            color: '#00e5c3', icon: '🔭' },
-    { label: 'Riscos',     val: countItems(s[2]?.content, 3, 5),   color: '#f5a623', icon: '⚠️' },
-    { label: 'Insights',   val: countItems(s[5]?.content || s[4]?.content, 3, 6), color: '#7c6ff7', icon: '💡' },
-    { label: 'Recomend.',  val: countItems(s[7]?.content, 3, 5),   color: '#1da1f2', icon: '🎯' },
-  ]
-})
-function countItems(content, min, max) {
-  if (!content) return min
-  const bullets = (content.match(/^[-•*]\s/gm) || []).length
-  const numbered = (content.match(/^\d+\./gm) || []).length
-  const total = bullets + numbered
-  return Math.min(Math.max(total || min, min), max)
-}
+// Badges de contagem
+const countBadges = computed(() => [
+  { label:'Cenários',  val: cenarios.value.length,       color:'#00e5c3', icon:'🔭' },
+  { label:'Riscos',    val: parsedRiscos.value.length,    color:'#f5a623', icon:'⚠️' },
+  { label:'Insights',  val: parsedInsights.value.length,  color:'#7c6ff7', icon:'💡' },
+  { label:'Recomend.', val: parsedRecomendacoes.value.length, color:'#1da1f2', icon:'🎯' },
+])
 
-// 3. KPI Cards: extrair métricas das seções
+// KPI Cards
 const kpiCards = computed(() => {
   const cards = []
   secoes.value.forEach(s => {
     if (!s.content) return
-    // Padrão: **Nome**: valor% ou **Nome**: valor + adjetivo
     const re = /\*\*([^*:]+)\*\*[:\s]+([^.\n,]+(?:%|\d+)[^.\n,]*)/g
     let m
     while ((m = re.exec(s.content)) !== null && cards.length < 5) {
@@ -97,108 +130,240 @@ const kpiCards = computed(() => {
       }
     }
   })
-  // Fallback se não encontrou nada
   if (cards.length === 0) {
-    return extractFallbackKPIs()
+    if (twTotals.value.posts) cards.push({ label:'Posts Twitter', valor: String(twTotals.value.posts), trend:'up' })
+    if (rdTotals.value.posts) cards.push({ label:'Posts Reddit',  valor: String(rdTotals.value.posts),  trend:'up' })
+    if (totalAcoes.value)     cards.push({ label:'Interações',    valor: totalAcoes.value.toLocaleString('pt-BR'), trend:'up' })
+    if (totalRodadas.value)   cards.push({ label:'Rodadas',       valor: String(totalRodadas.value),    trend:'neutral' })
   }
   return cards.slice(0, 5)
 })
 function trendFrom(s) {
   if (!s) return 'neutral'
   const low = s.toLowerCase()
-  if (low.includes('cresce') || low.includes('alta') || low.includes('aumento') || low.includes('positiv')) return 'up'
-  if (low.includes('queda') || low.includes('baixa') || low.includes('reduz') || low.includes('negat')) return 'down'
+  if (low.includes('cresce') || low.includes('alta') || low.includes('aumento') || low.includes('elev') || low.includes('positiv')) return 'up'
+  if (low.includes('queda') || low.includes('baixa') || low.includes('reduz') || low.includes('negat') || low.includes('dimin')) return 'down'
   return 'neutral'
 }
-function extractFallbackKPIs() {
-  const cards = []
-  if (twTotals.value.posts)     cards.push({ label:'Posts Twitter', valor: String(twTotals.value.posts), trend:'up' })
-  if (rdTotals.value.posts)     cards.push({ label:'Posts Reddit',  valor: String(rdTotals.value.posts),  trend:'up' })
-  if (twTotals.value.likes)     cards.push({ label:'Curtidas',      valor: String(twTotals.value.likes),  trend:'up' })
-  if (totalAcoes.value)         cards.push({ label:'Interações',    valor: totalAcoes.value.toLocaleString('pt-BR'), trend:'up' })
-  if (totalRodadas.value)       cards.push({ label:'Rodadas',       valor: String(totalRodadas.value),    trend:'neutral' })
-  return cards
-}
 
-// 4. Cenários com probabilidade
+// Cenários
 const cenarios = computed(() => {
-  const content = secoes.value[1]?.content || ''
+  const content = secCenarios.value?.content || ''
   if (!content) return defaultCenarios()
-
-  // Extrair nomes dos cenários (headings ou bold)
   const headings = [...content.matchAll(/(?:###?\s+|^|\n)\*{0,2}(Cenário\s+\w+[^*\n]*)\*{0,2}/gi)]
     .map(m => m[1].trim()).filter(n => n.length > 3).slice(0, 3)
-
-  // Extrair probabilidades (%): pegar os primeiros 3
   const probs = [...content.matchAll(/(\d{1,3})\s*%/g)]
     .map(m => parseInt(m[1])).filter(n => n >= 1 && n <= 100).slice(0, 6)
-
-  const nomes = headings.length >= 3
-    ? headings
-    : ['Crescimento Sustentável', 'Cenário Base', 'Crise Operacional']
-
-  // Encontrar probabilidades distintas para os 3 cenários
+  const nomes = headings.length >= 3 ? headings : ['Crescimento Sustentável', 'Cenário Base', 'Crise Operacional']
   const ps = probs.length >= 3 ? probs.slice(0, 3) : [70, 20, 10]
-
+  // Extrair descrições (texto entre cenários)
+  const descs = extractCenarioDescriptions(content, nomes)
   return [
-    { nome: nomes[0] || 'Crescimento Sustentável', prob: ps[0], cor:'#00e5c3', impacto:'Alto impacto',  corI:'rgba(0,229,195,0.15)'  },
-    { nome: nomes[1] || 'Cenário Base',            prob: ps[1], cor:'#f5a623', impacto:'Médio impacto', corI:'rgba(245,166,35,0.12)' },
-    { nome: nomes[2] || 'Crise Operacional',       prob: ps[2], cor:'#ff5a5a', impacto:'Alto impacto',  corI:'rgba(255,90,90,0.12)'  },
+    { nome: nomes[0], prob: ps[0], cor:'#00e5c3', impacto:'Alto impacto',  corI:'rgba(0,229,195,0.08)', desc: descs[0] },
+    { nome: nomes[1], prob: ps[1], cor:'#f5a623', impacto:'Médio impacto', corI:'rgba(245,166,35,0.08)', desc: descs[1] },
+    { nome: nomes[2], prob: ps[2], cor:'#ff5a5a', impacto:'Alto impacto',  corI:'rgba(255,90,90,0.08)',  desc: descs[2] },
   ]
 })
 function defaultCenarios() {
   return [
-    { nome:'Crescimento Sustentável', prob:70, cor:'#00e5c3', impacto:'Alto impacto',  corI:'rgba(0,229,195,0.15)'  },
-    { nome:'Estagnação',              prob:20, cor:'#f5a623', impacto:'Médio impacto', corI:'rgba(245,166,35,0.12)' },
-    { nome:'Crise Operacional',       prob:10, cor:'#ff5a5a', impacto:'Alto impacto',  corI:'rgba(255,90,90,0.12)'  },
+    { nome:'Crescimento Sustentável', prob:70, cor:'#00e5c3', impacto:'Alto impacto',  corI:'rgba(0,229,195,0.08)', desc:'' },
+    { nome:'Estagnação',              prob:20, cor:'#f5a623', impacto:'Médio impacto', corI:'rgba(245,166,35,0.08)', desc:'' },
+    { nome:'Crise Operacional',       prob:10, cor:'#ff5a5a', impacto:'Alto impacto',  corI:'rgba(255,90,90,0.08)',  desc:'' },
   ]
+}
+function extractCenarioDescriptions(content, nomes) {
+  const descs = ['','','']
+  // Split content by scenario headings and grab text between
+  for (let i = 0; i < nomes.length; i++) {
+    const escapedName = nomes[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const re = new RegExp(escapedName + '[^\\n]*\\n([\\s\\S]*?)(?=(?:Cenário|$))', 'i')
+    const m = content.match(re)
+    if (m) {
+      // Limpar markdown e pegar primeiras 2 frases
+      let txt = m[1].replace(/\*\*/g,'').replace(/^[-•*#]+\s/gm,'').replace(/\n+/g,' ').trim()
+      // Remove probability line
+      txt = txt.replace(/\d{1,3}\s*%\s*(de\s+)?probabilidade/gi, '').trim()
+      // Pegar até 200 chars
+      descs[i] = txt.slice(0, 200).replace(/\s+\S*$/, '') + (txt.length > 200 ? '...' : '')
+    }
+  }
+  return descs
+}
+
+// Riscos parser
+const parsedRiscos = computed(() => {
+  const content = secRiscos.value?.content || ''
+  if (!content) return []
+  const risks = []
+  // Pattern: **Nome do Risco** seguido de descrição, probabilidade%, impacto
+  const blocks = content.split(/(?=\*\*[^*]+\*\*)/).filter(b => b.trim())
+  for (const block of blocks) {
+    const nameMatch = block.match(/\*\*([^*]+)\*\*/)
+    if (!nameMatch) continue
+    const name = nameMatch[1].trim()
+    if (name.length < 5 || name.length > 80) continue
+    const probMatch = block.match(/(\d{1,3})\s*%/)
+    const prob = probMatch ? parseInt(probMatch[1]) : null
+    const impMatch = block.match(/\b(alto|médio|medio|baixo)\b/i)
+    const impacto = impMatch ? impMatch[1].charAt(0).toUpperCase() + impMatch[1].slice(1).toLowerCase() : 'Médio'
+    const desc = block.replace(/\*\*[^*]+\*\*/,'').replace(/\d{1,3}\s*%/,'').replace(/\b(alto|médio|medio|baixo)\b/gi,'')
+      .replace(/[-•*]\s/g,'').replace(/\n+/g,' ').trim().slice(0, 200)
+    if (name.toLowerCase().includes('risco') || name.toLowerCase().includes('fator') || prob || risks.length < 5) {
+      risks.push({ name, desc, prob: prob || 30, impacto: impacto.replace('Medio','Médio'), color: impacto.toLowerCase().includes('alt') ? '#ff5a5a' : '#f5a623' })
+    }
+    if (risks.length >= 5) break
+  }
+  return risks.length ? risks : fallbackItems(content, 3, 5)
+})
+
+// Recomendações parser
+const parsedRecomendacoes = computed(() => {
+  const content = secRecomendacoes.value?.content || ''
+  if (!content) return []
+  const recs = []
+  const blocks = content.split(/(?=\*\*[^*]+\*\*|\d+\.\s)/).filter(b => b.trim())
+  for (const block of blocks) {
+    const nameMatch = block.match(/\*\*([^*]+)\*\*/) || block.match(/\d+\.\s+(.+?)(?:\n|$)/)
+    if (!nameMatch) continue
+    const name = nameMatch[1].trim()
+    if (name.length < 5 || name.length > 100) continue
+    const urgMatch = block.match(/\b(urgente|alta|média|media|baixa)\b/i)
+    const urgencia = urgMatch ? urgMatch[1].charAt(0).toUpperCase() + urgMatch[1].slice(1).toLowerCase() : null
+    const prazoMatch = block.match(/(?:prazo|próximos?)\s*:?\s*([^\n.]+)/i)
+    const prazo = prazoMatch ? prazoMatch[1].trim().slice(0, 40) : null
+    const desc = block.replace(/\*\*[^*]+\*\*/,'').replace(/\d+\.\s/,'')
+      .replace(/\b(urgente|alta|média|media|baixa)\b/gi,'').replace(/[-•*]\s/g,'')
+      .replace(/\n+/g,' ').trim().slice(0, 250)
+    recs.push({
+      name, desc, urgencia: urgencia?.replace('Media','Média'),
+      prazo: prazo || 'Próximos 3 meses',
+      urgColor: urgencia?.toLowerCase() === 'urgente' ? '#ff5a5a' : urgencia?.toLowerCase() === 'alta' ? '#f5a623' : '#00e5c3'
+    })
+    if (recs.length >= 5) break
+  }
+  return recs
+})
+
+// Previsões parser
+const parsedPrevisoes = computed(() => {
+  const content = secPrevisoes.value?.content || ''
+  if (!content) return []
+  const preds = []
+  // Split by numbered items or bold items
+  const items = content.split(/(?=\d+\.\s|\*\*[^*]+\*\*)/).filter(b => b.trim().length > 20)
+  for (const item of items) {
+    const text = item.replace(/\*\*/g,'').replace(/\d+\.\s/,'').replace(/[-•]\s/g,'').replace(/\n+/g,' ').trim()
+    if (text.length > 20) {
+      preds.push({ text: text.slice(0, 250) + (text.length > 250 ? '...' : '') })
+    }
+    if (preds.length >= 4) break
+  }
+  return preds
+})
+
+// Insights parser
+const parsedInsights = computed(() => {
+  const content = secInsights.value?.content || ''
+  if (!content) return []
+  const items = []
+  const parts = content.split(/(?=\d+\.\s|\*\*[^*]+\*\*|^[-•]\s)/m).filter(b => b.trim().length > 15)
+  for (const part of parts) {
+    const text = part.replace(/\*\*/g,'').replace(/\d+\.\s/,'').replace(/^[-•]\s/,'').replace(/\n+/g,' ').trim()
+    if (text.length > 15) {
+      items.push({ text: text.slice(0, 220) + (text.length > 220 ? '...' : '') })
+    }
+    if (items.length >= 6) break
+  }
+  return items
+})
+
+// Timeline parser
+const parsedTimeline = computed(() => {
+  const sec = secoes.value.find(s => categ(s.title) === 'timeline')
+  const content = sec?.content || secPrevisoes.value?.content || ''
+  if (!content) return []
+  const events = []
+  // Look for date patterns followed by descriptions
+  const dateBlocks = content.split(/(?=(?:Janeiro|Fevereiro|Março|Abril|Maio|Junho|Julho|Agosto|Setembro|Outubro|Novembro|Dezembro|Até|Em)\s)/i)
+  for (const block of dateBlocks) {
+    const dateMatch = block.match(/^((?:Janeiro|Fevereiro|Março|Abril|Maio|Junho|Julho|Agosto|Setembro|Outubro|Novembro|Dezembro|Até|Em)[^\n.]+)/i)
+    if (!dateMatch) continue
+    const date = dateMatch[1].trim().slice(0, 60)
+    const rest = block.slice(dateMatch[0].length).replace(/\*\*/g,'').replace(/\n+/g,' ').trim()
+    const probMatch = rest.match(/(\d{1,3})\s*%/)
+    const prob = probMatch ? parseInt(probMatch[1]) : null
+    const desc = rest.replace(/\d{1,3}\s*%\s*(de\s+)?probabilidade/gi,'').trim().slice(0, 200)
+    if (desc.length > 10) {
+      events.push({ date, desc, prob })
+    }
+    if (events.length >= 5) break
+  }
+  return events
+})
+
+// Hipóteses confidence badges
+const hipotesesBadges = computed(() => {
+  const sec = deepSections.value.find(s => categ(s.title || s.label) === 'deep_hipoteses')
+  if (!sec?.content) return []
+  const badges = []
+  const matches = [...sec.content.matchAll(/confiança\s*:?\s*(alta|média|media|baixa)/gi)]
+  for (const m of matches) {
+    const val = m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase()
+    badges.push({ label: val.replace('Media','Média'), color: val.toLowerCase().includes('alt') ? '#00e5c3' : val.toLowerCase().includes('méd') || val.toLowerCase().includes('med') ? '#f5a623' : '#ff5a5a' })
+  }
+  return badges
+})
+
+function fallbackItems(content, min, max) {
+  const items = []
+  const parts = content.split(/\n\n+/).filter(p => p.trim().length > 20)
+  for (const p of parts.slice(0, max)) {
+    items.push({ name: p.slice(0, 50), desc: p.slice(50, 200), prob: 30, impacto: 'Médio', color: '#f5a623' })
+  }
+  return items.slice(0, Math.max(min, items.length))
 }
 
 // ─── CHARTS ──────────────────────────────────────────────────
-
-// Gráfico de linha (evolução por rodada)
 const chartW = 460; const chartH = 160
 const cp = { t:14, r:12, b:28, l:34 }
 const lineChart = computed(() => {
   const rds = rounds.value
   if (rds.length < 2) return null
   const maxVal = Math.max(...rds.map(r => r.total), 1)
-  const w = chartW - cp.l - cp.r
-  const h = chartH - cp.t - cp.b
+  const w = chartW - cp.l - cp.r; const h = chartH - cp.t - cp.b
   const x = i => cp.l + (i / Math.max(rds.length-1,1)) * w
   const y = v => cp.t + h - (v / maxVal) * h
   const path = fn => rds.map((r,i) => `${i===0?'M':'L'}${x(i).toFixed(1)},${y(fn(r)).toFixed(1)}`).join(' ')
   const n = rds.length
-  const labels = rds.filter((_,i) => i % Math.max(Math.floor(n/7),1) === 0)
-    .map(r => ({ r: r.round, x: x(rds.indexOf(r)) }))
+  const labels = rds.filter((_,i) => i % Math.max(Math.floor(n/7),1) === 0).map(r => ({ r: r.round, x: x(rds.indexOf(r)) }))
   return {
     tw: path(r=>r.twitter), rd: path(r=>r.reddit), total: path(r=>r.total),
     area: `${path(r=>r.total)} L${x(n-1).toFixed(1)},${(cp.t+h).toFixed(1)} L${cp.l},${(cp.t+h).toFixed(1)} Z`,
-    labels, maxVal,
-    yLines: [0,.33,.66,1].map(f => ({ val: Math.round(maxVal*f), y: y(maxVal*f) }))
+    labels, maxVal, yLines: [0,.33,.66,1].map(f => ({ val: Math.round(maxVal*f), y: y(maxVal*f) }))
   }
 })
 
-// Radar chart (5 eixos)
-const radarSize = 90
-const radarCenter = { x: 110, y: 110 }
-const radarAxes = ['Consenso', 'Engajamento', 'Cobertura', 'Inovação', 'Tensão']
-
+const radarSize = 90; const radarCenter = { x: 110, y: 110 }
+const radarAxes = computed(() => {
+  const r = rounds.value
+  if (!r.length) return ['Consenso','Engajamento','Cobertura','Inovação','Tensão']
+  // Use real metric names from analytics if available
+  return Object.keys(r[0] || {}).filter(k => !['round','total','twitter','reddit'].includes(k)).slice(0,5)
+    .map(k => k.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()))
+    .concat(['Consenso','Engajamento','Cobertura','Inovação','Tensão']).slice(0,5)
+})
 const radarVals = computed(() => {
   const tw = twTotals.value; const rd = rdTotals.value
-  const tot = totalAcoes.value || 1
-  const maxPosts  = Math.max(tw.posts||0, rd.posts||0, 1)
-  const maxLikes  = Math.max(tw.likes||0, 1)
-  // Normalizar 0-1
+  const maxPosts = Math.max(tw.posts||0, rd.posts||0, 1)
+  const maxLikes = Math.max(tw.likes||0, 1)
   return [
-    Math.min((tw.posts||0) / maxPosts, 1),           // Consenso proxy
-    Math.min((tw.likes||0) / Math.max(maxLikes, 1), 1), // Engajamento
-    Math.min((rd.posts||0) / maxPosts, 1),            // Cobertura
-    Math.min((tw.comments||0) / Math.max(tw.posts||1, 1) / 3, 1), // Inovação
-    Math.min(1 - ((tw.posts||0) / maxPosts), 1),      // Tensão (inverso)
+    Math.min((tw.posts||0) / maxPosts, 1),
+    Math.min((tw.likes||0) / maxLikes, 1),
+    Math.min((rd.posts||0) / maxPosts, 1),
+    Math.min((tw.comments||0) / Math.max(tw.posts||1,1) / 3, 1),
+    Math.min(1 - ((tw.posts||0) / maxPosts), 1),
   ]
 })
-
 function radarPoints(vals, size) {
   return vals.map((v, i) => {
     const angle = (i / vals.length) * 2 * Math.PI - Math.PI / 2
@@ -207,47 +372,30 @@ function radarPoints(vals, size) {
   })
 }
 function radarGridPoints(f) {
-  return radarAxes.map((_, i) => {
-    const angle = (i / radarAxes.length) * 2 * Math.PI - Math.PI / 2
-    const r = f * radarSize
-    return { x: radarCenter.x + r * Math.cos(angle), y: radarCenter.y + r * Math.sin(angle) }
+  return radarAxes.value.map((_, i) => {
+    const angle = (i / radarAxes.value.length) * 2 * Math.PI - Math.PI / 2
+    return { x: radarCenter.x + f * radarSize * Math.cos(angle), y: radarCenter.y + f * radarSize * Math.sin(angle) }
   })
 }
 function pts(arr) { return arr.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') }
-
 const radarData = computed(() => ({
-  data:   radarPoints(radarVals.value, radarSize),
-  grid25: radarGridPoints(0.25),
-  grid50: radarGridPoints(0.5),
-  grid75: radarGridPoints(0.75),
-  grid100: radarGridPoints(1),
-  axes: radarAxes.map((label, i) => {
-    const angle = (i / radarAxes.length) * 2 * Math.PI - Math.PI / 2
-    return {
-      label,
-      x1: radarCenter.x, y1: radarCenter.y,
-      x2: radarCenter.x + radarSize * Math.cos(angle),
-      y2: radarCenter.y + radarSize * Math.sin(angle),
-      lx: radarCenter.x + (radarSize + 18) * Math.cos(angle),
-      ly: radarCenter.y + (radarSize + 18) * Math.sin(angle),
-    }
+  data: radarPoints(radarVals.value, radarSize),
+  grid25: radarGridPoints(0.25), grid50: radarGridPoints(0.5),
+  grid75: radarGridPoints(0.75), grid100: radarGridPoints(1),
+  axes: radarAxes.value.map((label, i) => {
+    const angle = (i / radarAxes.value.length) * 2 * Math.PI - Math.PI / 2
+    return { label, x1:radarCenter.x, y1:radarCenter.y,
+      x2:radarCenter.x+radarSize*Math.cos(angle), y2:radarCenter.y+radarSize*Math.sin(angle),
+      lx:radarCenter.x+(radarSize+18)*Math.cos(angle), ly:radarCenter.y+(radarSize+18)*Math.sin(angle) }
   })
 }))
 
-// Gauge path SVG
 function gaugePath(pct) {
-  const r = 44; const cx = 60; const cy = 65
-  const startAngle = Math.PI
-  const endAngle   = Math.PI + (pct / 100) * Math.PI
-  const sx = cx + r * Math.cos(startAngle)
-  const sy = cy + r * Math.sin(startAngle)
-  const ex = cx + r * Math.cos(endAngle)
-  const ey = cy + r * Math.sin(endAngle)
-  const large = pct > 50 ? 1 : 0
-  return `M ${sx.toFixed(1)} ${sy.toFixed(1)} A ${r} ${r} 0 ${large} 1 ${ex.toFixed(1)} ${ey.toFixed(1)}`
+  const r=44, cx=60, cy=65, sa=Math.PI, ea=Math.PI+(pct/100)*Math.PI
+  const sx=cx+r*Math.cos(sa), sy=cy+r*Math.sin(sa), ex=cx+r*Math.cos(ea), ey=cy+r*Math.sin(ea)
+  return `M ${sx.toFixed(1)} ${sy.toFixed(1)} A ${r} ${r} 0 ${pct>50?1:0} 1 ${ex.toFixed(1)} ${ey.toFixed(1)}`
 }
 
-// Markdown renderer
 function md(text) {
   if (!text) return ''
   return text
@@ -261,19 +409,12 @@ function md(text) {
     .replace(/^[-•]\s(.+)$/gm,'<li>$1</li>')
     .replace(/(<li>[\s\S]*?<\/li>\n?)+/g, s => `<ul>${s}</ul>`)
     .replace(/^\d+\.\s(.+)$/gm,'<li>$1</li>')
-    .replace(/\n\n/g,         '</p><p>')
+    .replace(/\n\n/g,'</p><p>')
     .replace(/^(?!<)(.+)$/gm, m => `<p>${m}</p>`)
     .replace(/<p><\/p>/g, '')
 }
-
 function truncar(t, n=160) { return t?.length > n ? t.slice(0,n)+'...' : (t||'') }
 
-// Accordion
-function toggleSecao(idx) {
-  secaoAberta.value = secaoAberta.value === idx ? null : idx
-}
-
-// Navegar de volta
 async function voltar() {
   let pid = report.value?.project_id
   if (!pid && report.value?.simulation_id) {
@@ -281,13 +422,16 @@ async function voltar() {
       const res = await service.get('/api/simulation/list', { params: { limit: 200 } })
       const lista = res?.data?.data || res?.data || []
       pid = lista.find(s => s.simulation_id === report.value.simulation_id)?.project_id
-    } catch { /* ignorar */ }
+    } catch {}
   }
   router.push(pid ? `/projeto/${pid}` : '/')
 }
-
-// Exportar PDF
 function exportarPDF() { window.print() }
+function abrirChat() {
+  // Navigate to interaction/chat view if available
+  const rid = route.params.reportId
+  router.push(`/agentes/${rid}`)
+}
 </script>
 
 <template>
@@ -297,13 +441,11 @@ function exportarPDF() { window.print() }
       <AugurButton @click="exportarPDF" class="np">⬇ Exportar PDF</AugurButton>
     </template>
 
-    <!-- Loading -->
     <div v-if="carregando" class="loading np">
       <div class="spin"></div>
       <div><div class="ld-t">Carregando relatório...</div><div class="ld-s">Processando análises</div></div>
     </div>
 
-    <!-- Erro -->
     <div v-else-if="erro" class="erro-st np">
       <div style="font-size:48px">⚠️</div>
       <div style="color:var(--danger);font-size:14px">{{ erro }}</div>
@@ -312,7 +454,7 @@ function exportarPDF() { window.print() }
 
     <div v-else-if="report" class="page">
 
-      <!-- breadcrumb cabeçalho -->
+      <!-- Breadcrumb -->
       <div class="page-head np">
         <div class="bc">
           <span class="bc-link" @click="voltar">← Projeto</span>
@@ -320,50 +462,34 @@ function exportarPDF() { window.print() }
           <span class="bc-cur">Relatório</span>
         </div>
         <div class="page-meta">
-          <span v-if="geradoEm" class="meta-item">🕐 {{ geradoEm }}</span>
+          <span class="meta-item" v-if="geradoEm">🕐 {{ geradoEm }}</span>
           <span class="meta-item">📊 Análise Preditiva — AUGUR by itcast</span>
         </div>
       </div>
 
-      <!-- ══════════════════════════════════════════════ -->
-      <!-- BLOCO 1 — RESUMO EXECUTIVO                    -->
-      <!-- ══════════════════════════════════════════════ -->
+      <!-- ══════════ 1. RESUMO EXECUTIVO ══════════ -->
       <div class="bloco resumo-bloco">
         <div class="bloco-label">RESUMO EXECUTIVO</div>
-
         <div class="resumo-inner">
-          <!-- Gauge de confiança -->
           <div class="gauge-wrap">
             <svg viewBox="0 0 120 80" class="gauge-svg">
-              <defs>
-                <linearGradient id="gg" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stop-color="#ff5a5a"/>
-                  <stop offset="45%" stop-color="#f5a623"/>
-                  <stop offset="100%" stop-color="#00e5c3"/>
-                </linearGradient>
-              </defs>
-              <!-- Trilha -->
-              <path d="M 16 65 A 44 44 0 0 1 104 65" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="10" stroke-linecap="round"/>
-              <!-- Progresso -->
-              <path :d="gaugePath(confianca)" fill="none" stroke="url(#gg)" stroke-width="10" stroke-linecap="round"/>
-              <!-- Valor -->
-              <text x="60" y="58" text-anchor="middle" font-size="22" font-weight="800" fill="#f0f0f8" font-family="monospace">{{ confianca }}%</text>
-              <text x="60" y="74" text-anchor="middle" font-size="9" fill="#6b6b80" letter-spacing="1">CONFIANÇA</text>
+              <path d="M 16 65 A 44 44 0 0 1 104 65" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="8" stroke-linecap="round"/>
+              <path :d="gaugePath(confianca)" fill="none" stroke="url(#gaugeGrad)" stroke-width="8" stroke-linecap="round"/>
+              <defs><linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#7c6ff7"/><stop offset="100%" stop-color="#00e5c3"/></linearGradient></defs>
+              <text x="60" y="56" text-anchor="middle" fill="var(--text-primary)" font-size="24" font-weight="800">{{ confianca }}%</text>
+              <text x="60" y="72" text-anchor="middle" fill="var(--text-muted)" font-size="8" font-weight="600" letter-spacing="1">CONFIANÇA</text>
             </svg>
           </div>
 
-          <!-- Texto do resumo -->
           <div class="resumo-texto">
-            <div v-if="secoes[0]?.content" class="resumo-md md-body" v-html="md(secoes[0].content)"></div>
-            <div v-else-if="report?.outline?.summary" class="resumo-md md-body">{{ report.outline.summary }}</div>
+            <div v-if="secResumo?.content" class="resumo-md md-body" v-html="md(secResumo.content)"></div>
             <div v-if="simReq" class="resumo-hip">
-              <span class="hip-lbl">Hipótese:</span> {{ truncar(simReq, 200) }}
+              <span class="hip-lbl">Hipótese:</span> {{ truncar(simReq, 250) }}
             </div>
           </div>
 
-          <!-- Badges de contagem -->
           <div class="resumo-badges">
-            <div v-for="b in countBadges" :key="b.label" class="count-badge" :style="{'border-color': b.color+'44', background: b.color+'11'}">
+            <div v-for="b in countBadges" :key="b.label" class="count-badge" :style="{borderColor: b.color+'44'}">
               <div class="cb-icon">{{ b.icon }}</div>
               <div class="cb-val" :style="{color: b.color}">{{ b.val }}</div>
               <div class="cb-label">{{ b.label }}</div>
@@ -372,31 +498,24 @@ function exportarPDF() { window.print() }
         </div>
       </div>
 
-      <!-- ══════════════════════════════════════════════ -->
-      <!-- BLOCO 2 — KPI CARDS                          -->
-      <!-- ══════════════════════════════════════════════ -->
+      <!-- ══════════ 2. KPI CARDS ══════════ -->
       <div v-if="kpiCards.length" class="kpi-row">
         <div v-for="k in kpiCards" :key="k.label" class="kpi-card">
           <div class="kpi-header">
             <div class="kpi-label">{{ k.label }}</div>
-            <div class="kpi-trend" :class="k.trend">
-              <svg v-if="k.trend==='up'"   viewBox="0 0 10 10" width="10" height="10"><polyline points="1,8 5,2 9,8" fill="none" stroke="#00e5c3" stroke-width="2"/></svg>
-              <svg v-else-if="k.trend==='down'" viewBox="0 0 10 10" width="10" height="10"><polyline points="1,2 5,8 9,2" fill="none" stroke="#ff5a5a" stroke-width="2"/></svg>
-              <svg v-else viewBox="0 0 10 10" width="10" height="10"><line x1="1" y1="5" x2="9" y2="5" stroke="#6b6b80" stroke-width="2"/></svg>
-            </div>
+            <svg v-if="k.trend==='up'" viewBox="0 0 10 10" width="10" height="10"><polyline points="1,8 5,2 9,8" fill="none" stroke="#00e5c3" stroke-width="2"/></svg>
+            <svg v-else-if="k.trend==='down'" viewBox="0 0 10 10" width="10" height="10"><polyline points="1,2 5,8 9,2" fill="none" stroke="#ff5a5a" stroke-width="2"/></svg>
+            <svg v-else viewBox="0 0 10 10" width="10" height="10"><line x1="1" y1="5" x2="9" y2="5" stroke="#6b6b80" stroke-width="2"/></svg>
           </div>
           <div class="kpi-valor">{{ k.valor }}</div>
         </div>
       </div>
 
-      <!-- ══════════════════════════════════════════════ -->
-      <!-- BLOCO 3 — EVOLUÇÃO + RADAR                   -->
-      <!-- ══════════════════════════════════════════════ -->
+      <!-- ══════════ 3. EVOLUÇÃO + RADAR ══════════ -->
       <div class="bloco-2col" v-if="lineChart || analytics">
-        <!-- Linha -->
         <div class="bloco chart-bloco" v-if="lineChart">
           <div class="bloco-label-row">
-            <span class="bloco-label-sm">EVOLUÇÃO POR RODADA</span>
+            <span class="bloco-label-sm">Evolução da Simulação</span>
             <div class="chart-leg">
               <span style="color:#1da1f2">■ Twitter</span>
               <span style="color:#ff4500">■ Reddit</span>
@@ -405,122 +524,187 @@ function exportarPDF() { window.print() }
           </div>
           <div class="chart-axis-label">Métricas por rodada</div>
           <svg :viewBox="`0 0 ${chartW} ${chartH}`" class="chart-svg" preserveAspectRatio="xMidYMid meet">
-            <defs>
-              <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#00e5c3" stop-opacity="0.18"/>
-                <stop offset="100%" stop-color="#00e5c3" stop-opacity="0"/>
-              </linearGradient>
-            </defs>
-            <g v-for="l in lineChart.yLines" :key="l.val">
-              <line :x1="cp.l" :y1="l.y" :x2="chartW-cp.r" :y2="l.y" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
-              <text :x="cp.l-4" :y="l.y+4" text-anchor="end" fill="rgba(255,255,255,0.3)" font-size="9">{{ l.val }}</text>
-            </g>
-            <g v-for="lb in lineChart.labels" :key="lb.r">
-              <text :x="lb.x" :y="chartH-cp.b+14" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="9">R{{ lb.r }}</text>
-            </g>
-            <path :d="lineChart.area"  fill="url(#ag)" stroke="none"/>
-            <path :d="lineChart.tw"    fill="none" stroke="#1da1f2" stroke-width="2"   stroke-linejoin="round"/>
-            <path :d="lineChart.rd"    fill="none" stroke="#ff4500" stroke-width="2"   stroke-linejoin="round"/>
+            <defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00e5c3" stop-opacity="0.18"/><stop offset="100%" stop-color="#00e5c3" stop-opacity="0"/></linearGradient></defs>
+            <g v-for="l in lineChart.yLines" :key="l.val"><line :x1="cp.l" :y1="l.y" :x2="chartW-cp.r" :y2="l.y" stroke="rgba(255,255,255,0.06)" stroke-width="1"/><text :x="cp.l-4" :y="l.y+4" text-anchor="end" fill="rgba(255,255,255,0.3)" font-size="9">{{ l.val }}</text></g>
+            <g v-for="lb in lineChart.labels" :key="lb.r"><text :x="lb.x" :y="chartH-cp.b+14" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="9">R{{ lb.r }}</text></g>
+            <path :d="lineChart.area" fill="url(#ag)" stroke="none"/>
+            <path :d="lineChart.tw" fill="none" stroke="#1da1f2" stroke-width="2" stroke-linejoin="round"/>
+            <path :d="lineChart.rd" fill="none" stroke="#ff4500" stroke-width="2" stroke-linejoin="round"/>
             <path :d="lineChart.total" fill="none" stroke="#00e5c3" stroke-width="2.5" stroke-linejoin="round"/>
           </svg>
         </div>
-
-        <!-- Radar -->
         <div class="bloco chart-bloco" v-if="analytics">
-          <div class="bloco-label-sm" style="margin-bottom:8px">RADAR DE MÉTRICAS</div>
+          <div class="bloco-label-sm" style="margin-bottom:8px">Radar de métricas</div>
           <svg viewBox="0 0 220 220" class="radar-svg" preserveAspectRatio="xMidYMid meet">
-            <!-- Grids -->
             <polygon :points="pts(radarData.grid100)" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
-            <polygon :points="pts(radarData.grid75)"  fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
-            <polygon :points="pts(radarData.grid50)"  fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-            <polygon :points="pts(radarData.grid25)"  fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
-            <!-- Eixos -->
-            <line v-for="ax in radarData.axes" :key="ax.label"
-              :x1="ax.x1" :y1="ax.y1" :x2="ax.x2" :y2="ax.y2"
-              stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-            <!-- Labels -->
-            <text v-for="ax in radarData.axes" :key="ax.label+'l'"
-              :x="ax.lx" :y="ax.ly" text-anchor="middle" dominant-baseline="middle"
-              fill="rgba(255,255,255,0.45)" font-size="9">{{ ax.label }}</text>
-            <!-- Dados -->
-            <polygon :points="pts(radarData.data)"
-              fill="rgba(0,229,195,0.15)" stroke="#00e5c3" stroke-width="2"/>
-            <!-- Pontos -->
-            <circle v-for="(pt,i) in radarData.data" :key="i"
-              :cx="pt.x" :cy="pt.y" r="3" fill="#00e5c3"/>
+            <polygon :points="pts(radarData.grid75)" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+            <polygon :points="pts(radarData.grid50)" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+            <polygon :points="pts(radarData.grid25)" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+            <line v-for="ax in radarData.axes" :key="ax.label" :x1="ax.x1" :y1="ax.y1" :x2="ax.x2" :y2="ax.y2" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+            <text v-for="ax in radarData.axes" :key="ax.label+'l'" :x="ax.lx" :y="ax.ly" text-anchor="middle" dominant-baseline="middle" fill="rgba(255,255,255,0.45)" font-size="9">{{ ax.label }}</text>
+            <polygon :points="pts(radarData.data)" fill="rgba(0,229,195,0.15)" stroke="#00e5c3" stroke-width="2"/>
+            <circle v-for="(pt,i) in radarData.data" :key="i" :cx="pt.x" :cy="pt.y" r="3" fill="#00e5c3"/>
           </svg>
         </div>
       </div>
 
-      <!-- ══════════════════════════════════════════════ -->
-      <!-- BLOCO 4 — CENÁRIOS FUTUROS                   -->
-      <!-- ══════════════════════════════════════════════ -->
-      <div class="bloco" v-if="secoes[1]">
+      <!-- ══════════ 4. CENÁRIOS FUTUROS ══════════ -->
+      <div class="bloco" v-if="secCenarios">
         <div class="bloco-label-row">
-          <span class="bloco-label">CENÁRIOS FUTUROS</span>
+          <span class="bloco-label">🔭 Cenários Futuros</span>
           <span class="bloco-count">{{ cenarios.length }}</span>
         </div>
-
-        <!-- Barras de probabilidade -->
         <div class="prob-section">
           <div class="prob-title">Probabilidade por cenário</div>
           <div class="prob-bars">
             <div v-for="c in cenarios" :key="c.nome" class="prob-bar-row">
               <div class="pb-label">{{ truncar(c.nome, 24) }}</div>
-              <div class="pb-track">
-                <div class="pb-fill" :style="{width: c.prob+'%', background: c.cor}"></div>
-              </div>
+              <div class="pb-track"><div class="pb-fill" :style="{width: c.prob+'%', background: c.cor}"></div></div>
               <div class="pb-pct" :style="{color: c.cor}">{{ c.prob }}%</div>
             </div>
           </div>
         </div>
-
-        <!-- Cards de cenários -->
         <div class="cen-grid">
-          <div v-for="c in cenarios" :key="c.nome+'c'" class="cen-card" :style="{borderColor: c.cor+'44', background: c.corI}">
+          <div v-for="c in cenarios" :key="c.nome" class="cen-card" :style="{borderColor: c.cor+'44', background: c.corI}">
             <div class="cen-top">
               <div class="cen-nome">{{ c.nome }}</div>
               <div class="cen-impacto" :style="{background: c.cor+'22', color: c.cor}">{{ c.impacto }}</div>
             </div>
-            <div class="cen-prob-bar">
-              <div class="cpb-fill" :style="{width: c.prob+'%', background: c.cor}"></div>
-            </div>
+            <div v-if="c.desc" class="cen-desc">{{ c.desc }}</div>
+            <div class="cen-prob-bar"><div class="cpb-fill" :style="{width: c.prob+'%', background: c.cor}"></div></div>
             <div class="cen-probval" :style="{color: c.cor}">Probabilidade <strong>{{ c.prob }}%</strong></div>
           </div>
         </div>
+      </div>
 
-        <!-- Conteúdo completo da seção de cenários -->
-        <div class="sec-content" v-if="secoes[1].content">
-          <div class="md-body" v-html="md(secoes[1].content)"></div>
+      <!-- ══════════ 5. INSIGHTS PRINCIPAIS ══════════ -->
+      <div class="bloco" v-if="parsedInsights.length">
+        <div class="bloco-label-row">
+          <span class="bloco-label">💡 Insights Principais</span>
+          <span class="bloco-count">{{ parsedInsights.length }}</span>
+        </div>
+        <div class="insights-grid">
+          <div v-for="(ins, i) in parsedInsights" :key="i" class="insight-card">
+            <div class="insight-num" :style="{background: i%2===0 ? 'rgba(124,111,247,0.15)' : 'rgba(0,229,195,0.15)', color: i%2===0 ? '#7c6ff7' : '#00e5c3'}">{{ i + 1 }}</div>
+            <div class="insight-text">{{ ins.text }}</div>
+          </div>
         </div>
       </div>
 
-      <!-- ══════════════════════════════════════════════ -->
-      <!-- BLOCOS 5-9 — SEÇÕES RESTANTES (accordion)    -->
-      <!-- ══════════════════════════════════════════════ -->
-      <div v-for="(s, idx) in secoes.slice(2)" :key="idx+2" class="bloco secao-bloco">
-        <button class="secao-toggle" @click="toggleSecao(idx+2)" :class="{ active: secaoAberta === idx+2 }">
-          <div class="toggle-left">
-            <span class="sec-num">{{ String(idx+3).padStart(2,'0') }}</span>
-            <span class="sec-nom">{{ s.title }}</span>
+      <!-- ══════════ 6. FATORES DE RISCO ══════════ -->
+      <div class="bloco" v-if="parsedRiscos.length">
+        <div class="bloco-label-row">
+          <span class="bloco-label">⚠️ Fatores de Risco</span>
+          <span class="bloco-count">{{ parsedRiscos.length }}</span>
+        </div>
+        <div class="risk-list">
+          <div v-for="(r, i) in parsedRiscos" :key="i" class="risk-card">
+            <div class="risk-top">
+              <div class="risk-name">{{ r.name }}</div>
+              <div class="risk-badge" :style="{background: r.color+'22', color: r.color}">{{ r.impacto }}</div>
+            </div>
+            <div class="risk-desc" v-if="r.desc">{{ r.desc }}</div>
+            <div class="risk-prob-row">
+              <span class="risk-prob-label">Probabilidade de ocorrência</span>
+              <div class="risk-prob-track"><div class="risk-prob-fill" :style="{width: r.prob+'%', background: r.color}"></div></div>
+              <span class="risk-prob-pct" :style="{color: r.color}">{{ r.prob }}%</span>
+            </div>
           </div>
-          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"
-            :style="{transform: secaoAberta===idx+2 ? 'rotate(180deg)' : 'rotate(0deg)', transition:'transform .2s'}">
-            <polyline points="2,4 6,8 10,4"/>
-          </svg>
-        </button>
-
-        <Transition name="drop">
-          <div v-show="secaoAberta !== idx+2 || secaoAberta === null" class="sec-body-inner">
-            <div v-if="s.content" class="md-body" v-html="md(s.content)"></div>
-            <div v-else-if="s.description" class="sec-desc">{{ s.description }}</div>
-          </div>
-        </Transition>
+        </div>
       </div>
 
-      <!-- ══════════════════════════════════════════════ -->
-      <!-- ANALYTICS EXTRA (se disponível)              -->
-      <!-- ══════════════════════════════════════════════ -->
+      <!-- ══════════ 7. RECOMENDAÇÕES ESTRATÉGICAS ══════════ -->
+      <div class="bloco" v-if="parsedRecomendacoes.length">
+        <div class="bloco-label-row">
+          <span class="bloco-label">🎯 Recomendações Estratégicas</span>
+          <span class="bloco-count">{{ parsedRecomendacoes.length }}</span>
+        </div>
+        <div class="rec-list">
+          <div v-for="(r, i) in parsedRecomendacoes" :key="i" class="rec-card">
+            <div class="rec-num">{{ i + 1 }}</div>
+            <div class="rec-body">
+              <div class="rec-top">
+                <div class="rec-name">{{ r.name }}</div>
+                <div v-if="r.urgencia" class="rec-urg" :style="{background: r.urgColor+'22', color: r.urgColor}">{{ r.urgencia }}</div>
+              </div>
+              <div class="rec-desc" v-if="r.desc">{{ r.desc }}</div>
+              <div class="rec-prazo" v-if="r.prazo">🕐 {{ r.prazo }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════ 8. PREVISÕES ══════════ -->
+      <div class="bloco" v-if="parsedPrevisoes.length">
+        <div class="bloco-label-row">
+          <span class="bloco-label">🚀 Previsões</span>
+          <span class="bloco-count">{{ parsedPrevisoes.length }}</span>
+        </div>
+        <div class="pred-grid">
+          <div v-for="(p, i) in parsedPrevisoes" :key="i" class="pred-card">
+            <div class="pred-num" :style="{background: ['rgba(0,229,195,0.15)','rgba(124,111,247,0.15)','rgba(29,161,242,0.15)','rgba(245,166,35,0.15)'][i%4], color: ['#00e5c3','#7c6ff7','#1da1f2','#f5a623'][i%4]}">{{ i + 1 }}</div>
+            <div class="pred-text">{{ p.text }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════ 9. TIMELINE DE EVENTOS ══════════ -->
+      <div class="bloco" v-if="parsedTimeline.length">
+        <div class="bloco-label-row">
+          <span class="bloco-label">🕐 Timeline de Eventos</span>
+          <span class="bloco-count">{{ parsedTimeline.length }}</span>
+        </div>
+        <div class="timeline">
+          <div v-for="(ev, i) in parsedTimeline" :key="i" class="tl-item">
+            <div class="tl-dot"></div>
+            <div class="tl-content">
+              <div class="tl-top">
+                <div class="tl-date">{{ ev.date }}</div>
+                <div v-if="ev.prob" class="tl-prob">{{ ev.prob }}% de probabilidade</div>
+              </div>
+              <div class="tl-desc">{{ ev.desc }}</div>
+              <div v-if="ev.prob" class="tl-bar"><div class="tl-bar-fill" :style="{width: ev.prob+'%'}"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════ 10. ANÁLISE PROFUNDA ══════════ -->
+      <div class="bloco deep-bloco" v-if="deepSections.length">
+        <div class="bloco-label-row">
+          <span class="bloco-label">ℹ️ Análise Profunda</span>
+        </div>
+        <div class="deep-tabs">
+          <button v-for="(ds, i) in deepSections" :key="i" class="deep-tab" :class="{active: deepTab === i}" @click="deepTab = i">
+            <span class="deep-tab-icon">{{ ds.icon }}</span>
+            <span class="deep-tab-label">{{ ds.label }}</span>
+            <!-- Badges for Hipóteses -->
+            <template v-if="ds.label === 'Hipóteses Causais' && hipotesesBadges.length">
+              <span v-for="(b, bi) in hipotesesBadges.slice(0,5)" :key="bi" class="hyp-badge" :style="{background: b.color+'22', color: b.color}">{{ b.label }}</span>
+            </template>
+          </button>
+        </div>
+        <div class="deep-content" v-if="deepSections[deepTab]">
+          <div class="md-body" v-html="md(deepSections[deepTab].content || '')"></div>
+        </div>
+      </div>
+
+      <!-- ══════════ SEÇÕES GENÉRICAS (se houver) ══════════ -->
+      <div v-for="(s, idx) in genericSections" :key="'gen-'+idx" class="bloco secao-bloco">
+        <div class="sec-head" @click="s._open = !s._open">
+          <div class="toggle-left">
+            <span class="sec-num">{{ String(idx+1).padStart(2,'0') }}</span>
+            <span class="sec-nom">{{ s.title }}</span>
+          </div>
+          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" :style="{transform: s._open ? 'rotate(180deg)' : '', transition:'transform .2s'}"><polyline points="2,4 6,8 10,4"/></svg>
+        </div>
+        <div v-if="!s._open" class="sec-body-inner">
+          <div v-if="s.content" class="md-body" v-html="md(s.content)"></div>
+          <div v-else-if="s.description" class="sec-desc">{{ s.description }}</div>
+        </div>
+      </div>
+
+      <!-- ══════════ TOP AGENTES ══════════ -->
       <div v-if="analytics && twTopAgents.length" class="bloco np">
         <div class="bloco-label">TOP AGENTES — ANÁLISE DE INFLUÊNCIA</div>
         <div class="agents-grid">
@@ -534,6 +718,17 @@ function exportarPDF() { window.print() }
               <span>👥 {{ ag.num_followers }}</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- ══════════ CTA — CONVERSAR COM REPORTAGENT ══════════ -->
+      <div class="cta-bar np">
+        <div class="cta-inner">
+          <div class="cta-text">
+            <div class="cta-title">Quer aprofundar a análise?</div>
+            <div class="cta-sub">Converse com o ReportAgent ou com agentes individuais para explorar cenários alternativos, questionar previsões e obter insights adicionais.</div>
+          </div>
+          <button class="cta-btn" @click="abrirChat">💬 Conversar com ReportAgent</button>
         </div>
       </div>
 
@@ -557,7 +752,6 @@ function exportarPDF() { window.print() }
 .btn-g { background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer; }
 .page { display:flex;flex-direction:column;gap:16px;padding-bottom:40px; }
 
-/* ─── Page head ─────────────────────────────────────────────── */
 .page-head { display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding-bottom:4px; }
 .bc { display:flex;align-items:center;gap:6px;font-size:13px; }
 .bc-link { color:var(--accent2);cursor:pointer; }
@@ -569,9 +763,9 @@ function exportarPDF() { window.print() }
 
 /* ─── Blocos ─────────────────────────────────────────────────── */
 .bloco { background:var(--bg-surface);border:1px solid var(--border);border-radius:14px;padding:22px 24px;display:flex;flex-direction:column;gap:16px; }
-.bloco-label { font-size:10px;font-weight:700;color:var(--text-muted);letter-spacing:1.5px;text-transform:uppercase; }
+.bloco-label { font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:1.2px;text-transform:uppercase; }
 .bloco-label-row { display:flex;align-items:center;justify-content:space-between; }
-.bloco-label-sm { font-size:10px;font-weight:700;color:var(--text-muted);letter-spacing:1.2px;text-transform:uppercase; }
+.bloco-label-sm { font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase; }
 .bloco-count { font-size:11px;font-weight:700;color:var(--accent2);background:var(--accent2-dim);border-radius:20px;padding:2px 10px; }
 
 /* ─── Resumo Executivo ──────────────────────────────────────── */
@@ -614,23 +808,82 @@ function exportarPDF() { window.print() }
 .pb-track { flex:1;height:8px;background:var(--bg-overlay);border-radius:4px;overflow:hidden; }
 .pb-fill { height:100%;border-radius:4px;transition:width .6s ease; }
 .pb-pct { font-size:12px;font-weight:700;min-width:36px;text-align:right;font-family:monospace; }
-
 .cen-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:12px; }
 .cen-card { border:1px solid;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px; }
 .cen-top { display:flex;align-items:flex-start;justify-content:space-between;gap:8px; }
 .cen-nome { font-size:14px;font-weight:700;color:var(--text-primary);line-height:1.3; }
+.cen-desc { font-size:12px;color:var(--text-muted);line-height:1.6; }
 .cen-impacto { font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;white-space:nowrap;flex-shrink:0; }
 .cen-prob-bar { height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden; }
 .cpb-fill { height:100%;border-radius:3px; }
 .cen-probval { font-size:12px;color:var(--text-muted); }
 
-.sec-content { border-top:1px solid var(--border);padding-top:16px; }
+/* ─── Insights ──────────────────────────────────────────────── */
+.insights-grid { display:grid;grid-template-columns:repeat(2,1fr);gap:12px; }
+.insight-card { display:flex;gap:14px;align-items:flex-start;background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;padding:16px; }
+.insight-num { width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0; }
+.insight-text { font-size:13px;color:var(--text-secondary);line-height:1.6; }
 
-/* ─── Seções accordion ──────────────────────────────────────── */
+/* ─── Riscos ──────────────────────────────────────────────── */
+.risk-list { display:flex;flex-direction:column;gap:12px; }
+.risk-card { background:var(--bg-raised);border:1px solid var(--border);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:10px;transition:border-color .2s; }
+.risk-card:hover { border-color:var(--border-md); }
+.risk-top { display:flex;align-items:center;justify-content:space-between;gap:12px; }
+.risk-name { font-size:14px;font-weight:700;color:var(--text-primary); }
+.risk-badge { font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap; }
+.risk-desc { font-size:12.5px;color:var(--text-muted);line-height:1.6; }
+.risk-prob-row { display:flex;align-items:center;gap:10px; }
+.risk-prob-label { font-size:11px;color:var(--text-muted);white-space:nowrap; }
+.risk-prob-track { flex:1;height:6px;background:var(--bg-overlay);border-radius:3px;overflow:hidden; }
+.risk-prob-fill { height:100%;border-radius:3px;transition:width .6s ease; }
+.risk-prob-pct { font-size:12px;font-weight:700;min-width:30px;text-align:right;font-family:monospace; }
+
+/* ─── Recomendações ──────────────────────────────────────────── */
+.rec-list { display:flex;flex-direction:column;gap:12px; }
+.rec-card { display:flex;gap:16px;align-items:flex-start;background:var(--bg-raised);border:1px solid var(--border);border-radius:12px;padding:18px 20px;transition:border-color .2s; }
+.rec-card:hover { border-color:var(--border-md); }
+.rec-num { width:32px;height:32px;background:rgba(29,161,242,0.12);color:#1da1f2;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0; }
+.rec-body { flex:1;display:flex;flex-direction:column;gap:6px; }
+.rec-top { display:flex;align-items:center;gap:10px;flex-wrap:wrap; }
+.rec-name { font-size:14px;font-weight:700;color:var(--text-primary); }
+.rec-urg { font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap; }
+.rec-desc { font-size:12.5px;color:var(--text-muted);line-height:1.6; }
+.rec-prazo { font-size:11px;color:var(--text-muted);opacity:.7; }
+
+/* ─── Previsões ──────────────────────────────────────────────── */
+.pred-grid { display:grid;grid-template-columns:repeat(2,1fr);gap:12px; }
+.pred-card { display:flex;gap:14px;align-items:flex-start;background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;padding:16px; }
+.pred-num { width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0; }
+.pred-text { font-size:13px;color:var(--text-secondary);line-height:1.6; }
+
+/* ─── Timeline ──────────────────────────────────────────────── */
+.timeline { display:flex;flex-direction:column;gap:0;padding-left:20px;border-left:2px solid var(--border); }
+.tl-item { position:relative;padding:16px 0 16px 24px; }
+.tl-dot { position:absolute;left:-27px;top:22px;width:12px;height:12px;border-radius:50%;background:var(--bg-surface);border:2px solid var(--accent2); }
+.tl-content { display:flex;flex-direction:column;gap:6px; }
+.tl-top { display:flex;align-items:center;justify-content:space-between;gap:8px; }
+.tl-date { font-size:12px;font-weight:700;color:var(--accent);text-transform:capitalize; }
+.tl-prob { font-size:11px;color:var(--text-muted); }
+.tl-desc { font-size:13px;color:var(--text-secondary);line-height:1.6; }
+.tl-bar { height:5px;background:var(--bg-overlay);border-radius:3px;overflow:hidden;margin-top:4px; }
+.tl-bar-fill { height:100%;background:var(--accent2);border-radius:3px;transition:width .6s ease; }
+
+/* ─── Análise Profunda ──────────────────────────────────────── */
+.deep-bloco { gap:0;padding:0;overflow:hidden; }
+.deep-bloco .bloco-label-row { padding:18px 22px 0; }
+.deep-tabs { display:flex;gap:0;border-bottom:1px solid var(--border);overflow-x:auto;padding:12px 22px 0; }
+.deep-tab { background:none;border:none;color:var(--text-muted);font-size:12px;font-weight:600;padding:10px 16px;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;display:flex;align-items:center;gap:6px;white-space:nowrap; }
+.deep-tab:hover { color:var(--text-secondary); }
+.deep-tab.active { color:var(--accent2);border-bottom-color:var(--accent2); }
+.deep-tab-icon { font-size:14px; }
+.deep-tab-label { font-size:12px; }
+.hyp-badge { font-size:9px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:2px; }
+.deep-content { padding:20px 22px; }
+
+/* ─── Seções genéricas ──────────────────────────────────────── */
 .secao-bloco { gap:0;padding:0;overflow:hidden; }
-.secao-toggle { width:100%;display:flex;align-items:center;justify-content:space-between;padding:16px 22px;background:none;border:none;cursor:pointer;text-align:left;color:var(--text-primary);transition:background .15s; }
-.secao-toggle:hover { background:var(--bg-raised); }
-.secao-toggle.active { background:rgba(124,111,247,0.06); }
+.sec-head { width:100%;display:flex;align-items:center;justify-content:space-between;padding:16px 22px;background:none;border:none;cursor:pointer;text-align:left;color:var(--text-primary);transition:background .15s; }
+.sec-head:hover { background:var(--bg-raised); }
 .toggle-left { display:flex;align-items:center;gap:12px; }
 .sec-num { font-size:11px;font-weight:800;color:var(--accent2);background:rgba(124,111,247,0.12);border:1px solid rgba(124,111,247,0.2);padding:3px 9px;border-radius:5px;font-family:monospace;flex-shrink:0; }
 .sec-nom { font-size:15px;font-weight:600;color:var(--text-primary); }
@@ -642,8 +895,17 @@ function exportarPDF() { window.print() }
 .agent-card { background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px; }
 .ag-rank { font-size:10px;font-weight:700;color:var(--accent2);font-family:monospace; }
 .ag-nome { font-size:13px;font-weight:600;color:var(--text-primary); }
-.ag-bio  { font-size:11px;color:var(--text-muted);line-height:1.5; }
+.ag-bio { font-size:11px;color:var(--text-muted);line-height:1.5; }
 .ag-stats { display:flex;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--text-muted);margin-top:2px; }
+
+/* ─── CTA ─────────────────────────────────────────────────── */
+.cta-bar { background:linear-gradient(135deg,rgba(124,111,247,0.08) 0%,rgba(0,229,195,0.06) 100%);border:1px solid rgba(124,111,247,0.2);border-radius:14px;padding:24px; }
+.cta-inner { display:flex;align-items:center;justify-content:space-between;gap:20px; }
+.cta-text { flex:1; }
+.cta-title { font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:6px; }
+.cta-sub { font-size:12.5px;color:var(--text-muted);line-height:1.5; }
+.cta-btn { background:var(--accent2);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity .15s; }
+.cta-btn:hover { opacity:.85; }
 
 /* ─── Markdown ──────────────────────────────────────────────── */
 .md-body { color:var(--text-secondary);font-size:13.5px;line-height:1.88; }
@@ -659,11 +921,6 @@ function exportarPDF() { window.print() }
 /* ─── Doc footer ─────────────────────────────────────────────── */
 .doc-foot { display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);padding:12px 4px;border-top:1px solid var(--border); }
 
-/* ─── Transition accordion ──────────────────────────────────── */
-.drop-enter-active,.drop-leave-active { transition:all .2s ease;overflow:hidden; }
-.drop-enter-from,.drop-leave-to { opacity:0;max-height:0; }
-.drop-enter-to,.drop-leave-from { opacity:1;max-height:2000px; }
-
 /* ─── PRINT ─────────────────────────────────────────────────── */
 @media print {
   * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
@@ -675,13 +932,11 @@ function exportarPDF() { window.print() }
   .cen-grid { grid-template-columns:repeat(3,1fr); }
   .resumo-inner { grid-template-columns:auto 1fr auto; }
   .agents-grid { grid-template-columns:repeat(3,1fr); }
-  .sec-body-inner { display:block !important; }
+  .sec-body-inner,.deep-content { display:block !important; }
   .doc-foot { display:flex !important; }
-  /* Cores para branco */
-  .bloco,.kpi-card,.chart-bloco,.cen-card,.agent-card,.prob-section { background:#fff !important;border-color:#e0e0ee !important; }
-  .md-body { color:#2a2a3e !important; }
-  .md-body :deep(*) { color:#2a2a3e !important; }
-  .sec-nom,.cb-val,.kpi-valor,.cen-nome { color:#1a1a2e !important; }
+  .bloco,.kpi-card,.chart-bloco,.cen-card,.agent-card,.prob-section,.risk-card,.rec-card,.insight-card,.pred-card { background:#fff !important;border-color:#e0e0ee !important; }
+  .md-body,.md-body :deep(*) { color:#2a2a3e !important; }
+  .sec-nom,.cb-val,.kpi-valor,.cen-nome,.risk-name,.rec-name { color:#1a1a2e !important; }
   .bloco-label,.bloco-label-sm,.sec-num,.cb-label,.kpi-label,.prob-title { color:#6b6b80 !important; }
   .doc-foot { color:#9898b0 !important;border-color:#e0e0ee !important; }
   .page-head { display:none !important; }
@@ -693,7 +948,10 @@ function exportarPDF() { window.print() }
   .resumo-badges { flex-direction:row;flex-wrap:wrap; }
   .bloco-2col { grid-template-columns:1fr; }
   .cen-grid { grid-template-columns:1fr; }
+  .insights-grid,.pred-grid { grid-template-columns:1fr; }
   .agents-grid { grid-template-columns:repeat(2,1fr); }
+  .deep-tabs { flex-wrap:wrap; }
+  .cta-inner { flex-direction:column;text-align:center; }
 }
 @media (max-width: 680px) {
   .bloco { padding:16px 16px; }
