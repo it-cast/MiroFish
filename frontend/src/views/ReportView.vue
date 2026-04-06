@@ -3,32 +3,37 @@ import { onMounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '../components/layout/AppShell.vue'
 import AugurButton from '../components/ui/AugurButton.vue'
-import SentimentBar from '../components/ui/SentimentBar.vue'
 import service from '../api'
 
-const route = useRoute()
+const route  = useRoute()
 const router = useRouter()
 
-const report = ref(null)
+const report    = ref(null)
+const analytics = ref(null)
 const carregando = ref(true)
-const erro = ref('')
+const erro      = ref('')
+const abaAtiva  = ref('relatorio')
 
+// ─── Carregar dados ───────────────────────────────────────────
 onMounted(async () => {
   carregando.value = true
-  erro.value = ''
   try {
-    const res = await service.get(`/api/report/${route.params.reportId}`)
-    const raw = res.data || res
-    report.value = {
-      summary: raw.summary || raw.executive_summary || '',
-      insights: raw.insights || [],
-      metrics: raw.metrics || {},
-      keywords: raw.keywords || [],
-      project_name: raw.project_name || raw.title || '',
-      project_id: raw.project_id || '',
-      simulation_id: raw.simulation_id || '',
-      agents_count: raw.agents_count || raw.metrics?.agents_reached || 0,
-      created_at: raw.created_at || raw.generated_at || '',
+    const [rRes, aRes] = await Promise.allSettled([
+      service.get(`/api/report/${route.params.reportId}`),
+      service.get(`/api/report/by-simulation-analytics/${route.params.reportId}`).catch(() => null)
+    ])
+
+    if (rRes.status === 'fulfilled') {
+      const raw = rRes.value?.data?.data || rRes.value?.data || rRes.value
+      report.value = raw
+
+      // Buscar analytics usando simulation_id do relatório
+      if (raw?.simulation_id) {
+        try {
+          const aRes2 = await service.get(`/api/analytics/${raw.simulation_id}`)
+          analytics.value = aRes2?.data?.data || aRes2?.data || null
+        } catch { /* analytics opcional */ }
+      }
     }
   } catch (e) {
     erro.value = e?.response?.data?.error || e?.message || 'Erro ao carregar relatório.'
@@ -37,297 +42,443 @@ onMounted(async () => {
   }
 })
 
-const colorByTag = (tag) => ({
-  'Oportunidade': '#00e5c3',
-  'Risco': '#ff5a5a',
-  'Observação': '#7c6ff7',
-  'Tendência': '#f5a623',
-}[tag] || '#9898b0')
+// ─── Dados do relatório ───────────────────────────────────────
+const titulo   = computed(() => report.value?.outline?.title || report.value?.title || 'Relatório de Previsão')
+const resumo   = computed(() => report.value?.outline?.summary || report.value?.simulation_requirement || '')
+const secoes   = computed(() => report.value?.outline?.sections || [])
+const markdown = computed(() => report.value?.markdown_content || '')
+const simReq   = computed(() => report.value?.simulation_requirement || '')
+const geradoEm = computed(() => {
+  const d = report.value?.completed_at || report.value?.created_at
+  if (!d) return ''
+  return new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+})
 
-const temInsights = computed(() => (report.value?.insights?.length || 0) > 0)
-const sentimento = computed(() => ({
-  positive: report.value?.metrics?.positive || report.value?.metrics?.sentiment_positive || 0,
-  neutral: report.value?.metrics?.neutral || report.value?.metrics?.sentiment_neutral || 0,
-  negative: report.value?.metrics?.negative || report.value?.metrics?.sentiment_negative || 0,
-}))
+// ─── Dados de analytics ───────────────────────────────────────
+const combinedRounds = computed(() => analytics.value?.combined?.rounds || [])
+const totalInteracoes = computed(() => analytics.value?.combined?.total_interactions || 0)
+const peakRound      = computed(() => analytics.value?.combined?.peak_round || {})
+const twTotals       = computed(() => analytics.value?.twitter?.totals || {})
+const rdTotals       = computed(() => analytics.value?.reddit?.totals || {})
+const twTopPosts     = computed(() => (analytics.value?.twitter?.top_posts || []).slice(0, 5))
+const rdTopPosts     = computed(() => (analytics.value?.reddit?.top_posts || []).slice(0, 5))
+const twEngagement   = computed(() => analytics.value?.twitter?.engagement || [])
 
-function formatarData(dt) {
-  if (!dt) return ''
-  return new Date(dt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+// ─── Gráfico SVG de atividade por rodada ──────────────────────
+const chartWidth  = 560
+const chartHeight = 180
+const chartPad    = { top: 20, right: 20, bottom: 30, left: 40 }
+
+const chartPoints = computed(() => {
+  const rounds = combinedRounds.value
+  if (!rounds.length) return { twitter: '', reddit: '', total: '', xLabels: [] }
+
+  const maxVal = Math.max(...rounds.map(r => r.total), 1)
+  const w = chartWidth - chartPad.left - chartPad.right
+  const h = chartHeight - chartPad.top - chartPad.bottom
+  const n = rounds.length
+
+  const x = (i) => chartPad.left + (i / Math.max(n - 1, 1)) * w
+  const y = (v) => chartPad.top + h - (v / maxVal) * h
+
+  const toPath = (getter) =>
+    rounds.map((r, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(getter(r)).toFixed(1)}`).join(' ')
+
+  const xLabels = rounds
+    .filter((_, i) => i % Math.max(Math.floor(n / 8), 1) === 0)
+    .map((r, _, arr) => ({
+      round: r.round,
+      xPos: x(rounds.indexOf(r))
+    }))
+
+  return {
+    twitter: toPath(r => r.twitter),
+    reddit:  toPath(r => r.reddit),
+    total:   toPath(r => r.total),
+    xLabels,
+    maxVal,
+    yLines: [0, 0.25, 0.5, 0.75, 1].map(f => ({
+      val: Math.round(maxVal * f),
+      y: y(maxVal * f)
+    }))
+  }
+})
+
+// ─── Renderizar markdown simples ──────────────────────────────
+function renderMarkdown(text) {
+  if (!text) return ''
+  return text
+    .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/^([^<].+)$/gm, (m) => m.startsWith('<') ? m : `<p>${m}</p>`)
+}
+
+// ─── Helpers ─────────────────────────────────────────────────
+function truncar(text, n = 120) {
+  if (!text) return ''
+  return text.length > n ? text.slice(0, n) + '...' : text
 }
 
 function voltar() {
-  if (report.value?.project_id) {
-    router.push(`/projeto/${report.value.project_id}`)
-  } else {
-    router.push('/')
-  }
+  const pid = report.value?.project_id
+  router.push(pid ? `/projeto/${pid}` : '/')
+}
+
+function corEngajamento(idx) {
+  const cores = ['#00e5c3', '#7c6ff7', '#f5a623', '#ff5a5a', '#1da1f2']
+  return cores[idx % cores.length]
 }
 </script>
 
 <template>
-  <AppShell :title="report?.project_name || 'Relatório'">
+  <AppShell :title="titulo">
     <template #actions>
-      <AugurButton variant="ghost" @click="voltar">← Voltar ao projeto</AugurButton>
-      <AugurButton variant="ghost" @click="router.push(`/agentes/${route.params.reportId}`)">
-        💬 Entrevistar Agentes
-      </AugurButton>
+      <AugurButton variant="ghost" @click="voltar">← Projeto</AugurButton>
     </template>
 
-    <!-- Loading skeleton -->
-    <div v-if="carregando" class="loading-state">
-      <div class="skeleton-header"></div>
-      <div class="skeleton-body">
-        <div class="skeleton-main">
-          <div class="skeleton-block tall"></div>
-          <div class="skeleton-block"></div>
-          <div class="skeleton-block"></div>
-        </div>
-        <div class="skeleton-side">
-          <div class="skeleton-block"></div>
-          <div class="skeleton-block short"></div>
-          <div class="skeleton-block short"></div>
-        </div>
-      </div>
-      <div class="loading-msg">
-        <div class="mini-spinner"></div>
-        Carregando relatório...
+    <!-- Loading -->
+    <div v-if="carregando" class="loading">
+      <div class="spinner"></div>
+      <div class="loading-text">
+        <div class="loading-titulo">Carregando relatório...</div>
+        <div class="loading-sub">Processando análises e dados da simulação</div>
       </div>
     </div>
 
     <!-- Erro -->
-    <div v-else-if="erro" class="error-state">
-      <div class="error-icon">⚠️</div>
-      <div class="error-titulo">Não foi possível carregar o relatório</div>
-      <div class="error-msg">{{ erro }}</div>
-      <div class="error-actions">
-        <button class="btn-ghost" @click="voltar">← Voltar</button>
-        <button class="btn-retry" @click="$router.go(0)">↺ Tentar novamente</button>
-      </div>
+    <div v-else-if="erro" class="erro-state">
+      <div class="erro-icon">⚠️</div>
+      <div class="erro-msg">{{ erro }}</div>
+      <button class="btn-ghost" @click="voltar">← Voltar</button>
     </div>
 
-    <!-- Relatório -->
-    <div v-else-if="report" class="relatorio">
+    <div v-else-if="report" class="page">
 
-      <!-- Header do relatório -->
-      <div class="rel-header">
-        <div class="rel-header-left">
-          <div class="rel-titulo">{{ report.project_name || 'Análise de Simulação' }}</div>
-          <div class="rel-meta">
-            <span v-if="report.created_at">📅 Gerado em {{ formatarData(report.created_at) }}</span>
-            <span v-if="report.agents_count" class="sep">·</span>
-            <span v-if="report.agents_count">🤖 {{ report.agents_count }} agentes</span>
-          </div>
+      <!-- ─── HEADER ─── -->
+      <div class="header-card">
+        <div class="header-badge">📊 Relatório de Previsão — AUGUR by itcast</div>
+        <h1 class="header-titulo">{{ titulo }}</h1>
+        <div class="header-hipotese" v-if="simReq">
+          <span class="hip-label">Hipótese testada:</span> {{ simReq }}
         </div>
-        <div class="rel-badge-conclusao">✅ Análise Concluída</div>
+        <div class="header-meta">
+          <span v-if="geradoEm">🕐 Gerado em {{ geradoEm }}</span>
+          <span v-if="totalInteracoes">🔬 {{ totalInteracoes }} interações simuladas</span>
+          <span v-if="combinedRounds.length">🔄 {{ combinedRounds.length }} rodadas</span>
+        </div>
+        <div class="header-resumo" v-if="resumo">{{ resumo }}</div>
       </div>
 
-      <div class="layout">
-        <!-- Coluna principal -->
-        <div class="main">
+      <!-- ─── ABAS ─── -->
+      <div class="abas">
+        <button :class="['aba', { active: abaAtiva === 'relatorio' }]" @click="abaAtiva = 'relatorio'">
+          📋 Relatório
+        </button>
+        <button :class="['aba', { active: abaAtiva === 'analytics' }]" @click="abaAtiva = 'analytics'"
+          v-if="analytics">
+          📈 Analytics
+        </button>
+        <button :class="['aba', { active: abaAtiva === 'posts' }]" @click="abaAtiva = 'posts'"
+          v-if="twTopPosts.length || rdTopPosts.length">
+          💬 Posts
+        </button>
+      </div>
 
-          <!-- Sumário executivo -->
-          <article class="summary">
-            <div class="sec-titulo">
-              <span class="sec-ico">📋</span>
-              Sumário Executivo
-            </div>
-            <div class="summary-body">
-              <p v-if="report.summary">{{ report.summary }}</p>
-              <p v-else class="sem-dados">Sumário não disponível para esta simulação.</p>
-            </div>
-          </article>
+      <!-- ══════════════════════════════════════════════════════ -->
+      <!-- ABA: RELATÓRIO                                         -->
+      <!-- ══════════════════════════════════════════════════════ -->
+      <div v-if="abaAtiva === 'relatorio'">
 
-          <!-- Insights -->
-          <article class="card" v-if="temInsights">
-            <div class="sec-titulo">
-              <span class="sec-ico">💡</span>
-              Insights Detalhados
-              <span class="insight-count">{{ report.insights.length }} análises</span>
+        <!-- Seções do relatório -->
+        <div v-if="secoes.length" class="secoes">
+          <div v-for="(s, idx) in secoes" :key="idx" class="secao-card">
+            <div class="secao-header">
+              <span class="secao-num">{{ String(idx + 1).padStart(2, '0') }}</span>
+              <h2 class="secao-titulo">{{ s.title }}</h2>
             </div>
-            <div class="insights-lista">
-              <div v-for="(insight, idx) in report.insights" :key="idx" class="insight">
-                <div class="insight-header">
-                  <span class="insight-tag" :style="{ color: colorByTag(insight.tag || 'Observação'), borderColor: colorByTag(insight.tag || 'Observação') }">
-                    {{ insight.tag || 'Observação' }}
-                  </span>
-                  <span v-if="insight.confidence" class="insight-conf">
-                    Confiança: {{ insight.confidence }}%
-                  </span>
+            <div class="secao-content" v-if="s.content" v-html="renderMarkdown(s.content)"></div>
+            <div class="secao-desc" v-else-if="s.description">{{ s.description }}</div>
+          </div>
+        </div>
+
+        <!-- Markdown completo (fallback) -->
+        <div v-else-if="markdown" class="markdown-card">
+          <div class="markdown-body" v-html="renderMarkdown(markdown)"></div>
+        </div>
+
+        <div v-else class="vazio">
+          <div>Relatório ainda sendo processado...</div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════ -->
+      <!-- ABA: ANALYTICS                                         -->
+      <!-- ══════════════════════════════════════════════════════ -->
+      <div v-if="abaAtiva === 'analytics' && analytics" class="analytics">
+
+        <!-- Métricas gerais -->
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-label">Total de interações</div>
+            <div class="metric-val">{{ totalInteracoes.toLocaleString('pt-BR') }}</div>
+            <div class="metric-sub">Twitter + Reddit</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Posts Twitter</div>
+            <div class="metric-val tw">{{ twTotals.posts || 0 }}</div>
+            <div class="metric-sub">{{ twTotals.likes || 0 }} curtidas · {{ twTotals.comments || 0 }} comentários</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Posts Reddit</div>
+            <div class="metric-val rd">{{ rdTotals.posts || 0 }}</div>
+            <div class="metric-sub">{{ rdTotals.likes || 0 }} curtidas · {{ rdTotals.comments || 0 }} comentários</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Pico de atividade</div>
+            <div class="metric-val pk">Rodada {{ peakRound.round }}</div>
+            <div class="metric-sub">{{ peakRound.total }} ações nessa rodada</div>
+          </div>
+        </div>
+
+        <!-- Gráfico de atividade por rodada -->
+        <div class="chart-card" v-if="combinedRounds.length > 1">
+          <div class="chart-header">
+            <h3 class="chart-titulo">Atividade por Rodada</h3>
+            <div class="chart-legend">
+              <span class="legend-tw">■ Twitter</span>
+              <span class="legend-rd">■ Reddit</span>
+            </div>
+          </div>
+          <svg :viewBox="`0 0 ${chartWidth} ${chartHeight}`" class="chart-svg" preserveAspectRatio="xMidYMid meet">
+            <!-- Grid lines -->
+            <g v-for="line in chartPoints.yLines" :key="line.val">
+              <line :x1="chartPad.left" :y1="line.y" :x2="chartWidth - chartPad.right" :y2="line.y"
+                stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+              <text :x="chartPad.left - 6" :y="line.y + 4" text-anchor="end"
+                fill="rgba(255,255,255,0.3)" font-size="10">{{ line.val }}</text>
+            </g>
+            <!-- X labels -->
+            <g v-for="label in chartPoints.xLabels" :key="label.round">
+              <text :x="label.xPos" :y="chartHeight - 5" text-anchor="middle"
+                fill="rgba(255,255,255,0.3)" font-size="10">R{{ label.round }}</text>
+            </g>
+            <!-- Twitter line -->
+            <path v-if="chartPoints.twitter" :d="chartPoints.twitter"
+              fill="none" stroke="#1da1f2" stroke-width="2" stroke-linejoin="round"/>
+            <!-- Reddit line -->
+            <path v-if="chartPoints.reddit" :d="chartPoints.reddit"
+              fill="none" stroke="#ff4500" stroke-width="2" stroke-linejoin="round"/>
+            <!-- Area under total -->
+            <path v-if="chartPoints.total"
+              :d="`${chartPoints.total} L${chartWidth - chartPad.right},${chartHeight - chartPad.bottom} L${chartPad.left},${chartHeight - chartPad.bottom} Z`"
+              fill="rgba(0,229,195,0.05)" stroke="none"/>
+            <path v-if="chartPoints.total" :d="chartPoints.total"
+              fill="none" stroke="rgba(0,229,195,0.4)" stroke-width="1.5" stroke-dasharray="4,3"/>
+          </svg>
+        </div>
+
+        <!-- Engajamento por agente (barras horizontais) -->
+        <div class="chart-card" v-if="twEngagement.length">
+          <h3 class="chart-titulo">Top Agentes — Posts publicados (Twitter)</h3>
+          <div class="bar-list">
+            <div v-for="(ag, idx) in twEngagement.slice(0, 10)" :key="ag.name" class="bar-row">
+              <div class="bar-name">{{ ag.name || ag.user_name || `Agente ${idx+1}` }}</div>
+              <div class="bar-track">
+                <div class="bar-fill"
+                  :style="{
+                    width: ((ag.posts / (twEngagement[0]?.posts || 1)) * 100) + '%',
+                    background: corEngajamento(idx)
+                  }">
                 </div>
-                <p class="insight-text">{{ insight.text || insight.description }}</p>
               </div>
+              <div class="bar-val">{{ ag.posts }}</div>
+              <div class="bar-likes">❤️ {{ ag.likes_received }}</div>
             </div>
-          </article>
-
-          <!-- Sem insights -->
-          <div v-else class="card sem-insights">
-            <div class="sem-ico">🔍</div>
-            <div>Nenhum insight detalhado disponível para esta simulação.</div>
           </div>
-
         </div>
 
-        <!-- Coluna lateral -->
-        <aside class="side">
-
-          <!-- Sentimento geral -->
-          <div class="card">
-            <div class="sec-titulo-sm">Sentimento Geral</div>
-            <SentimentBar
-              label=""
-              :positive="sentimento.positive"
-              :neutral="sentimento.neutral"
-              :negative="sentimento.negative"
-            />
-          </div>
-
-          <!-- Métricas principais -->
-          <div class="card">
-            <div class="sec-titulo-sm">Métricas da Simulação</div>
-            <div class="metricas-lista">
-              <div class="metrica-item" v-if="report.metrics.agents_reached">
-                <span class="met-label">Agentes alcançados</span>
-                <span class="met-val">{{ report.metrics.agents_reached }}</span>
-              </div>
-              <div class="metrica-item" v-if="report.metrics.posts_generated">
-                <span class="met-label">Posts gerados</span>
-                <span class="met-val">{{ report.metrics.posts_generated }}</span>
-              </div>
-              <div class="metrica-item" v-if="report.metrics.purchase_intent !== undefined">
-                <span class="met-label">Intenção de compra</span>
-                <span class="met-val accent">{{ report.metrics.purchase_intent }}%</span>
-              </div>
-              <div class="metrica-item" v-if="report.metrics.viral_probability !== undefined">
-                <span class="met-label">Probabilidade viral</span>
-                <span class="met-val accent2">{{ report.metrics.viral_probability }}%</span>
-              </div>
-              <div class="metrica-item" v-if="sentimento.positive">
-                <span class="met-label">Tom positivo</span>
-                <span class="met-val accent">{{ sentimento.positive }}%</span>
-              </div>
-              <div class="metrica-item" v-if="sentimento.negative">
-                <span class="met-label">Tom negativo</span>
-                <span class="met-val danger">{{ sentimento.negative }}%</span>
-              </div>
-              <div v-if="!Object.keys(report.metrics).length" class="sem-dados">
-                Métricas não disponíveis.
+        <!-- Top agentes Twitter -->
+        <div class="chart-card" v-if="analytics.twitter?.top_agents?.length">
+          <h3 class="chart-titulo">Top Agentes por Curtidas Recebidas (Twitter)</h3>
+          <div class="agents-grid">
+            <div v-for="(ag, idx) in analytics.twitter.top_agents.slice(0, 6)" :key="ag.user_id" class="agent-card">
+              <div class="agent-rank">#{{ idx + 1 }}</div>
+              <div class="agent-name">{{ ag.name || ag.user_name }}</div>
+              <div class="agent-bio">{{ truncar(ag.bio, 80) }}</div>
+              <div class="agent-stats">
+                <span>📝 {{ ag.posts_count }} posts</span>
+                <span>❤️ {{ ag.total_likes_received }}</span>
+                <span>👥 {{ ag.num_followers }} seguidores</span>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Palavras-chave -->
-          <div class="card" v-if="report.keywords?.length">
-            <div class="sec-titulo-sm">Palavras-chave Identificadas</div>
-            <div class="keywords">
-              <span v-for="(kw, idx) in report.keywords" :key="idx">{{ kw }}</span>
-            </div>
-          </div>
-
-          <!-- CTA entrevista -->
-          <div class="card card-cta">
-            <div class="cta-ico">💬</div>
-            <div class="cta-body">
-              <div class="cta-titulo">Quer saber mais?</div>
-              <div class="cta-sub">Entreviste os agentes diretamente e aprofunde as análises.</div>
-            </div>
-            <button class="btn-entrevistar" @click="router.push(`/agentes/${route.params.reportId}`)">
-              Entrevistar →
-            </button>
-          </div>
-
-        </aside>
       </div>
-    </div>
 
+      <!-- ══════════════════════════════════════════════════════ -->
+      <!-- ABA: POSTS                                             -->
+      <!-- ══════════════════════════════════════════════════════ -->
+      <div v-if="abaAtiva === 'posts'" class="posts-section">
+
+        <div class="posts-col" v-if="twTopPosts.length">
+          <div class="posts-header">
+            <span class="tw-badge">Twitter / X</span>
+            <span class="posts-subtitle">Top posts por curtidas</span>
+          </div>
+          <div v-for="post in twTopPosts" :key="post.post_id" class="post-card tw-card">
+            <div class="post-author">{{ post.name || post.user_name || 'Agente' }}</div>
+            <div class="post-content">{{ truncar(post.content, 200) }}</div>
+            <div class="post-stats">
+              <span class="stat-like">❤️ {{ post.num_likes }}</span>
+              <span class="stat-dis" v-if="post.num_dislikes">👎 {{ post.num_dislikes }}</span>
+              <span class="stat-rep" v-if="post.num_reports">🚩 {{ post.num_reports }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="posts-col" v-if="rdTopPosts.length">
+          <div class="posts-header">
+            <span class="rd-badge">Reddit</span>
+            <span class="posts-subtitle">Top posts por curtidas</span>
+          </div>
+          <div v-for="post in rdTopPosts" :key="post.post_id" class="post-card rd-card">
+            <div class="post-author">{{ post.name || post.user_name || 'Agente' }}</div>
+            <div class="post-content">{{ truncar(post.content, 200) }}</div>
+            <div class="post-stats">
+              <span class="stat-like">❤️ {{ post.num_likes }}</span>
+              <span class="stat-dis" v-if="post.num_dislikes">👎 {{ post.num_dislikes }}</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
   </AppShell>
 </template>
 
 <style scoped>
-/* Loading skeleton */
-.loading-state { display: flex; flex-direction: column; gap: 16px; }
-.skeleton-header { height: 80px; background: var(--bg-raised); border-radius: 12px; animation: shimmer 1.5s infinite; }
-.skeleton-body { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
-.skeleton-main, .skeleton-side { display: flex; flex-direction: column; gap: 10px; }
-.skeleton-block { height: 120px; background: var(--bg-raised); border-radius: 10px; animation: shimmer 1.5s infinite; }
-.skeleton-block.tall { height: 180px; }
-.skeleton-block.short { height: 80px; }
-@keyframes shimmer { 0%,100% { opacity:0.5; } 50% { opacity:1; } }
-.loading-msg { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-muted); justify-content: center; padding: 12px; }
-.mini-spinner { width: 16px; height: 16px; border: 2px solid var(--border-md); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* Erro */
-.error-state { text-align: center; padding: 60px 20px; }
-.error-icon { font-size: 48px; margin-bottom: 16px; }
-.error-titulo { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px; }
-.error-msg { font-size: 13px; color: var(--danger); margin-bottom: 20px; }
-.error-actions { display: flex; gap: 12px; justify-content: center; }
-.btn-ghost { background: none; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 8px; padding: 8px 16px; font-size: 13px; cursor: pointer; }
-.btn-retry { background: var(--accent2); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
-
-/* Relatório */
-.relatorio { display: flex; flex-direction: column; gap: 16px; }
-
-.rel-header { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 24px; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.rel-titulo { font-size: 20px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; letter-spacing: -0.3px; }
-.rel-meta { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
-.sep { opacity: 0.4; }
-.rel-badge-conclusao { background: rgba(0,229,195,0.1); color: var(--accent); border: 1px solid rgba(0,229,195,0.2); border-radius: 20px; padding: 5px 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
-
 /* Layout */
-.layout { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; }
-.main, .side { display: flex; flex-direction: column; gap: 12px; }
+.loading { display:flex; align-items:center; gap:16px; padding:60px; }
+.spinner { width:28px; height:28px; border:3px solid var(--border-md); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; flex-shrink:0; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.loading-titulo { font-size:16px; font-weight:600; color:var(--text-primary); }
+.loading-sub { font-size:13px; color:var(--text-muted); margin-top:4px; }
+.erro-state { text-align:center; padding:60px; display:flex; flex-direction:column; align-items:center; gap:12px; }
+.erro-icon { font-size:48px; }
+.erro-msg { font-size:14px; color:var(--danger); max-width:400px; }
+.btn-ghost { background:none; border:1px solid var(--border); color:var(--text-secondary); border-radius:8px; padding:8px 16px; font-size:13px; cursor:pointer; }
 
-/* Cards */
-.card { background: var(--bg-raised); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+.page { display:flex; flex-direction:column; gap:16px; }
 
-.sec-titulo { font-size: 14px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
-.sec-ico { font-size: 16px; }
-.insight-count { font-size: 11px; color: var(--text-muted); font-weight: 400; background: var(--bg-overlay); padding: 2px 8px; border-radius: 20px; margin-left: auto; }
+/* Header */
+.header-card { background:linear-gradient(135deg, var(--bg-surface) 0%, rgba(124,111,247,0.05) 100%); border:1px solid rgba(124,111,247,0.2); border-radius:16px; padding:28px 32px; display:flex; flex-direction:column; gap:12px; }
+.header-badge { font-size:11px; font-weight:600; color:var(--accent2); text-transform:uppercase; letter-spacing:1px; }
+.header-titulo { font-size:24px; font-weight:800; color:var(--text-primary); margin:0; letter-spacing:-.4px; line-height:1.3; }
+.header-hipotese { font-size:13px; color:var(--text-secondary); background:var(--bg-raised); border-left:3px solid var(--accent2); padding:10px 14px; border-radius:0 8px 8px 0; line-height:1.6; }
+.hip-label { font-weight:600; color:var(--accent2); margin-right:6px; }
+.header-meta { display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:var(--text-muted); }
+.header-resumo { font-size:14px; color:var(--text-secondary); line-height:1.7; font-style:italic; }
 
-.sec-titulo-sm { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+/* Abas */
+.abas { display:flex; gap:4px; border-bottom:1px solid var(--border); padding-bottom:0; }
+.aba { background:none; border:none; border-bottom:2px solid transparent; color:var(--text-muted); padding:8px 18px; font-size:13px; font-weight:500; cursor:pointer; transition:all .2s; margin-bottom:-1px; border-radius:8px 8px 0 0; }
+.aba:hover { color:var(--text-secondary); background:var(--bg-raised); }
+.aba.active { color:var(--accent2); border-bottom-color:var(--accent2); background:var(--bg-surface); }
 
-/* Sumário */
-.summary { border-left: 3px solid var(--accent); background: var(--bg-raised); border-radius: 0 12px 12px 0; border: 1px solid var(--border); border-left-color: var(--accent); border-left-width: 3px; padding: 18px 20px; }
-.summary-body p { font-size: 14px; color: var(--text-secondary); line-height: 1.8; margin: 0; }
+/* Relatório - seções */
+.secoes { display:flex; flex-direction:column; gap:12px; }
+.secao-card { background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.secao-header { display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid var(--border); background:var(--bg-raised); }
+.secao-num { font-size:11px; font-weight:700; color:var(--accent2); font-family:var(--font-mono); background:rgba(124,111,247,0.1); padding:3px 8px; border-radius:4px; }
+.secao-titulo { font-size:15px; font-weight:700; color:var(--text-primary); margin:0; }
+.secao-content { padding:20px; color:var(--text-secondary); font-size:14px; line-height:1.8; }
+.secao-content :deep(h1), .secao-content :deep(h2) { font-size:17px; font-weight:700; color:var(--text-primary); margin:20px 0 10px; }
+.secao-content :deep(h3), .secao-content :deep(h4) { font-size:14px; font-weight:600; color:var(--accent2); margin:16px 0 8px; }
+.secao-content :deep(strong) { color:var(--text-primary); }
+.secao-content :deep(ul) { padding-left:20px; margin:8px 0; }
+.secao-content :deep(li) { margin-bottom:6px; }
+.secao-content :deep(p) { margin:0 0 12px; }
+.secao-desc { padding:16px 20px; color:var(--text-muted); font-size:13px; font-style:italic; }
 
-/* Insights */
-.insights-lista { display: flex; flex-direction: column; gap: 0; }
-.insight { padding: 14px 0; border-bottom: 1px solid var(--border); }
-.insight:last-child { border-bottom: none; padding-bottom: 0; }
-.insight:first-child { padding-top: 0; }
-.insight-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.insight-tag { border: 1px solid; border-radius: 20px; padding: 2px 10px; font-size: 11px; font-weight: 600; }
-.insight-conf { font-size: 11px; color: var(--text-muted); }
-.insight-text { font-size: 13px; color: var(--text-secondary); line-height: 1.7; margin: 0; }
+.markdown-card { background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:28px; }
+.markdown-body { color:var(--text-secondary); font-size:14px; line-height:1.8; }
+.markdown-body :deep(h1) { font-size:20px; font-weight:800; color:var(--text-primary); margin:24px 0 12px; }
+.markdown-body :deep(h2) { font-size:17px; font-weight:700; color:var(--text-primary); margin:20px 0 10px; }
+.markdown-body :deep(h3) { font-size:14px; font-weight:600; color:var(--accent2); margin:16px 0 8px; }
+.markdown-body :deep(strong) { color:var(--text-primary); }
+.markdown-body :deep(ul) { padding-left:20px; }
+.markdown-body :deep(li) { margin-bottom:6px; }
+.markdown-body :deep(p) { margin:0 0 14px; }
 
-.sem-insights { text-align: center; padding: 32px; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.sem-ico { font-size: 32px; }
-.sem-dados { font-size: 12px; color: var(--text-muted); font-style: italic; }
+.vazio { text-align:center; padding:48px; color:var(--text-muted); font-size:14px; }
 
-/* Métricas */
-.metricas-lista { display: flex; flex-direction: column; gap: 0; }
-.metrica-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
-.metrica-item:last-child { border-bottom: none; }
-.met-label { color: var(--text-muted); }
-.met-val { font-weight: 600; color: var(--text-primary); font-family: var(--font-mono); }
-.accent { color: var(--accent); }
-.accent2 { color: var(--accent2); }
-.danger { color: var(--danger); }
+/* Analytics */
+.analytics { display:flex; flex-direction:column; gap:16px; }
+.metrics-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+.metric-card { background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; display:flex; flex-direction:column; gap:4px; }
+.metric-label { font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; }
+.metric-val { font-size:24px; font-weight:800; color:var(--text-primary); font-family:var(--font-mono); }
+.metric-val.tw { color:#1da1f2; }
+.metric-val.rd { color:#ff4500; }
+.metric-val.pk { color:var(--accent); font-size:18px; }
+.metric-sub { font-size:11px; color:var(--text-muted); }
 
-/* Keywords */
-.keywords { display: flex; gap: 8px; flex-wrap: wrap; }
-.keywords span { background: var(--accent-dim); color: var(--accent); padding: 4px 10px; border-radius: 999px; font-size: 12px; }
+.chart-card { background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:20px; }
+.chart-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.chart-titulo { font-size:14px; font-weight:600; color:var(--text-primary); margin:0 0 12px; }
+.chart-legend { display:flex; gap:12px; font-size:11px; }
+.legend-tw { color:#1da1f2; }
+.legend-rd { color:#ff4500; }
+.chart-svg { width:100%; height:auto; display:block; }
 
-/* CTA */
-.card-cta { display: flex; align-items: center; gap: 12px; border-color: rgba(124,111,247,0.2); background: rgba(124,111,247,0.04); }
-.cta-ico { font-size: 24px; flex-shrink: 0; }
-.cta-body { flex: 1; }
-.cta-titulo { font-size: 13px; font-weight: 600; color: var(--text-primary); }
-.cta-sub { font-size: 12px; color: var(--text-muted); }
-.btn-entrevistar { background: var(--accent2); color: #fff; border: none; border-radius: 8px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-.btn-entrevistar:hover { opacity: 0.85; }
+/* Barras */
+.bar-list { display:flex; flex-direction:column; gap:8px; }
+.bar-row { display:flex; align-items:center; gap:10px; }
+.bar-name { font-size:12px; color:var(--text-secondary); min-width:140px; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bar-track { flex:1; height:6px; background:var(--border); border-radius:3px; overflow:hidden; }
+.bar-fill { height:100%; border-radius:3px; transition:width .4s; }
+.bar-val { font-size:12px; color:var(--text-primary); font-family:var(--font-mono); min-width:24px; text-align:right; }
+.bar-likes { font-size:11px; color:var(--text-muted); min-width:44px; }
 
-@media (max-width: 1080px) { .layout { grid-template-columns: 1fr; } .skeleton-body { grid-template-columns: 1fr; } }
+/* Agentes */
+.agents-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+.agent-card { background:var(--bg-raised); border:1px solid var(--border); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:6px; }
+.agent-rank { font-size:10px; font-weight:700; color:var(--accent2); font-family:var(--font-mono); }
+.agent-name { font-size:13px; font-weight:600; color:var(--text-primary); }
+.agent-bio { font-size:11px; color:var(--text-muted); line-height:1.5; }
+.agent-stats { display:flex; gap:8px; flex-wrap:wrap; font-size:11px; color:var(--text-muted); margin-top:4px; }
+
+/* Posts */
+.posts-section { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.posts-col { display:flex; flex-direction:column; gap:10px; }
+.posts-header { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
+.tw-badge { background:rgba(29,161,242,.15); color:#1da1f2; font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px; }
+.rd-badge { background:rgba(255,69,0,.15); color:#ff4500; font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px; }
+.posts-subtitle { font-size:12px; color:var(--text-muted); }
+.post-card { background:var(--bg-surface); border:1px solid var(--border); border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:8px; transition:border-color .2s; }
+.post-card:hover { border-color:var(--border-md); }
+.tw-card { border-left:3px solid #1da1f2; }
+.rd-card { border-left:3px solid #ff4500; }
+.post-author { font-size:12px; font-weight:600; color:var(--text-secondary); }
+.post-content { font-size:13px; color:var(--text-primary); line-height:1.6; }
+.post-stats { display:flex; gap:12px; font-size:12px; }
+.stat-like { color:#f5a623; }
+.stat-dis { color:var(--danger); }
+.stat-rep { color:var(--text-muted); }
+
+@media (max-width: 1080px) {
+  .metrics-grid { grid-template-columns:repeat(2,1fr); }
+  .agents-grid  { grid-template-columns:repeat(2,1fr); }
+  .posts-section { grid-template-columns:1fr; }
+}
 </style>
