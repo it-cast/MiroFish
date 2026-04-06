@@ -108,6 +108,20 @@ async function criarSimulacao() {
   }
 }
 
+// ─── Gerar relatório manualmente ─────────────────────────────
+async function gerarRelatorio(simId) {
+  toast.info('Gerando relatório... isso pode levar alguns minutos.')
+  try {
+    const res = await service.post('/api/report/generate', { simulation_id: simId })
+    const data = res?.data?.data || res?.data || res
+    toast.success('Relatório em geração! Aguarde e recarregue a página.')
+    // Recarregar lista após 3s para pegar o report_id
+    setTimeout(carregar, 5000)
+  } catch (e) {
+    toast.error('Não foi possível gerar o relatório.')
+  }
+}
+
 // ─── Excluir projeto ─────────────────────────────────────────
 async function excluir() {
   deletando.value = true
@@ -144,7 +158,7 @@ function acaoSim(sim) {
   if (sim.report_id)
     return { label: '📊 Ver Relatório',     cls: 'a-report', fn: () => router.push(`/relatorio/${sim.report_id}`) }
   if (s === 'completed')
-    return { label: '📊 Ver Resultados',    cls: 'a-report', fn: () => router.push(`/simulacao/${sim.simulation_id}/executar`) }
+    return { label: '📄 Gerar Relatório',   cls: 'a-report', fn: () => gerarRelatorio(sim.simulation_id) }
   if (s === 'stopped' || s === 'paused')
     return { label: '▶ Retomar',            cls: 'a-btn',    fn: () => router.push(`/simulacao/${sim.simulation_id}/executar`) }
   return   { label: '⚙ Ver Pipeline',      cls: 'a-btn',    fn: () => router.push(`/simulacao/${pid.value}`) }
