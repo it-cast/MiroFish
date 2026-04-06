@@ -97,7 +97,8 @@ const networkSvg = computed(() => {
 <template>
   <AppShell title="Agentes Influentes">
     <template #actions>
-      <AugurButton variant="ghost" @click="router.push(`/simulacao/${simId}/agentes`)">🧠 Ver Agentes</AugurButton>
+      <AugurButton variant="ghost" @click="router.push(`/simulacao/${simId}/agentes`)">🧠 Agentes</AugurButton>
+      <AugurButton variant="ghost" @click="router.push(`/simulacao/${simId}/posts`)">📝 Posts</AugurButton>
       <AugurButton variant="ghost" @click="router.back()">← Voltar</AugurButton>
     </template>
 
