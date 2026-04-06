@@ -9,6 +9,7 @@ const route  = useRoute()
 const router = useRouter()
 const report     = ref(null)
 const analytics  = ref(null)
+const posts      = ref([])
 const carregando = ref(true)
 const erro       = ref('')
 const deepTab    = ref(0)
@@ -25,6 +26,14 @@ onMounted(async () => {
         const aRes = await service.get(`/api/analytics/${raw.simulation_id}`)
         analytics.value = aRes?.data?.data || aRes?.data || null
       } catch { /* opcional */ }
+      // Carregar posts dos agentes
+      try {
+        const twPosts = await service.get(`/api/simulation/${raw.simulation_id}/posts`, { params: { platform: 'twitter', limit: 50 } })
+        const rdPosts = await service.get(`/api/simulation/${raw.simulation_id}/posts`, { params: { platform: 'reddit', limit: 50 } })
+        const tw = (twPosts?.data?.data?.posts || twPosts?.data?.posts || []).map(p => ({ ...p, platform: 'twitter' }))
+        const rd = (rdPosts?.data?.data?.posts || rdPosts?.data?.posts || []).map(p => ({ ...p, platform: 'reddit' }))
+        posts.value = [...tw, ...rd].sort((a, b) => (b.num_likes || 0) - (a.num_likes || 0))
+      } catch { /* posts sao opcionais */ }
     }
   } catch (e) {
     erro.value = e?.response?.data?.error || e?.message || 'Erro ao carregar relatório.'
@@ -97,6 +106,28 @@ const rdTotals     = computed(() => analytics.value?.reddit?.totals   || {})
 const twTopAgents  = computed(() => analytics.value?.twitter?.top_agents || [])
 const totalAcoes   = computed(() => analytics.value?.combined?.total_interactions || 0)
 const totalRodadas = computed(() => analytics.value?.combined?.total_rounds || rounds.value.length || 0)
+
+// Posts mais relevantes (top likes)
+const topPosts = computed(() => posts.value.slice(0, 8))
+
+// Sentimento por plataforma
+const sentimentData = computed(() => {
+  if (!posts.value.length) return null
+  const tw = posts.value.filter(p => p.platform === 'twitter')
+  const rd = posts.value.filter(p => p.platform === 'reddit')
+  const calcSentiment = (arr) => {
+    const pos = arr.filter(p => (p.num_likes || 0) > (p.num_dislikes || 0)).length
+    const neg = arr.filter(p => (p.num_dislikes || 0) > (p.num_likes || 0)).length
+    const neu = arr.length - pos - neg
+    const total = Math.max(arr.length, 1)
+    return { pos: Math.round(pos/total*100), neg: Math.round(neg/total*100), neu: Math.round(neu/total*100), total: arr.length }
+  }
+  return {
+    twitter: calcSentiment(tw),
+    reddit: calcSentiment(rd),
+    geral: calcSentiment(posts.value)
+  }
+})
 
 // ─── PARSERS ─────────────────────────────────────────────────
 
@@ -468,7 +499,7 @@ async function exportarPDF() {
     clone.style.background = '#ffffff'
     clone.style.color = '#1a1a2e'
     clone.style.padding = '20px'
-    clone.querySelectorAll('.bloco, .kpi-card, .chart-bloco, .cen-card, .risk-card, .rec-card, .insight-card, .pred-card').forEach(b => {
+    clone.querySelectorAll('.bloco, .kpi-card, .chart-bloco, .cen-card, .risk-card, .rec-card, .insight-card, .pred-card, .sent-card, .post-card').forEach(b => {
       b.style.background = '#ffffff'
       b.style.borderColor = '#e0e0ee'
       b.style.color = '#2a2a3e'
@@ -476,7 +507,7 @@ async function exportarPDF() {
     clone.querySelectorAll('.bloco-label, .bloco-label-sm, .kpi-label, .prob-title').forEach(l => {
       l.style.color = '#6b6b80'
     })
-    clone.querySelectorAll('.md-body, .cen-desc, .risk-desc, .rec-desc, .insight-text, .pred-text, .tl-desc').forEach(t => {
+    clone.querySelectorAll('.md-body, .cen-desc, .risk-desc, .rec-desc, .insight-text, .pred-text, .tl-desc, .post-content, .sent-label').forEach(t => {
       t.style.color = '#3a3a4e'
     })
     clone.querySelectorAll('.sec-nom, .cb-val, .kpi-valor, .cen-nome, .risk-name, .rec-name').forEach(t => {
@@ -790,6 +821,74 @@ function abrirChat() {
         </div>
       </div>
 
+      <!-- ══════════ SENTIMENTO DA SIMULAÇÃO ══════════ -->
+      <div class="bloco" v-if="sentimentData">
+        <div class="bloco-label-row">
+          <span class="bloco-label">💭 Análise de Sentimento</span>
+          <span class="bloco-count">{{ sentimentData.geral.total }} posts</span>
+        </div>
+        <div class="sentiment-grid">
+          <div class="sent-card">
+            <div class="sent-title">Geral</div>
+            <div class="sent-bars">
+              <div class="sent-row">
+                <span class="sent-label">Positivo</span>
+                <div class="sent-track"><div class="sent-fill sent-pos" :style="{width: sentimentData.geral.pos+'%'}"></div></div>
+                <span class="sent-pct" style="color:#00e5c3">{{ sentimentData.geral.pos }}%</span>
+              </div>
+              <div class="sent-row">
+                <span class="sent-label">Neutro</span>
+                <div class="sent-track"><div class="sent-fill sent-neu" :style="{width: sentimentData.geral.neu+'%'}"></div></div>
+                <span class="sent-pct" style="color:#6b6b80">{{ sentimentData.geral.neu }}%</span>
+              </div>
+              <div class="sent-row">
+                <span class="sent-label">Negativo</span>
+                <div class="sent-track"><div class="sent-fill sent-neg" :style="{width: sentimentData.geral.neg+'%'}"></div></div>
+                <span class="sent-pct" style="color:#ff5a5a">{{ sentimentData.geral.neg }}%</span>
+              </div>
+            </div>
+          </div>
+          <div class="sent-card" v-if="sentimentData.twitter.total">
+            <div class="sent-title">🐦 Twitter <span class="sent-count">{{ sentimentData.twitter.total }}</span></div>
+            <div class="sent-bars">
+              <div class="sent-row"><span class="sent-label">Positivo</span><div class="sent-track"><div class="sent-fill sent-pos" :style="{width: sentimentData.twitter.pos+'%'}"></div></div><span class="sent-pct" style="color:#00e5c3">{{ sentimentData.twitter.pos }}%</span></div>
+              <div class="sent-row"><span class="sent-label">Neutro</span><div class="sent-track"><div class="sent-fill sent-neu" :style="{width: sentimentData.twitter.neu+'%'}"></div></div><span class="sent-pct" style="color:#6b6b80">{{ sentimentData.twitter.neu }}%</span></div>
+              <div class="sent-row"><span class="sent-label">Negativo</span><div class="sent-track"><div class="sent-fill sent-neg" :style="{width: sentimentData.twitter.neg+'%'}"></div></div><span class="sent-pct" style="color:#ff5a5a">{{ sentimentData.twitter.neg }}%</span></div>
+            </div>
+          </div>
+          <div class="sent-card" v-if="sentimentData.reddit.total">
+            <div class="sent-title">🔴 Reddit <span class="sent-count">{{ sentimentData.reddit.total }}</span></div>
+            <div class="sent-bars">
+              <div class="sent-row"><span class="sent-label">Positivo</span><div class="sent-track"><div class="sent-fill sent-pos" :style="{width: sentimentData.reddit.pos+'%'}"></div></div><span class="sent-pct" style="color:#00e5c3">{{ sentimentData.reddit.pos }}%</span></div>
+              <div class="sent-row"><span class="sent-label">Neutro</span><div class="sent-track"><div class="sent-fill sent-neu" :style="{width: sentimentData.reddit.neu+'%'}"></div></div><span class="sent-pct" style="color:#6b6b80">{{ sentimentData.reddit.neu }}%</span></div>
+              <div class="sent-row"><span class="sent-label">Negativo</span><div class="sent-track"><div class="sent-fill sent-neg" :style="{width: sentimentData.reddit.neg+'%'}"></div></div><span class="sent-pct" style="color:#ff5a5a">{{ sentimentData.reddit.neg }}%</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════ TOP POSTS DOS AGENTES ══════════ -->
+      <div class="bloco" v-if="topPosts.length">
+        <div class="bloco-label-row">
+          <span class="bloco-label">📝 Posts Mais Relevantes dos Agentes</span>
+          <span class="bloco-count">{{ topPosts.length }}</span>
+        </div>
+        <div class="posts-grid">
+          <div v-for="(p, i) in topPosts" :key="i" class="post-card">
+            <div class="post-header">
+              <div class="post-author">{{ p.author || p.username || p.user_name || 'Agente' }}</div>
+              <div class="post-platform" :class="p.platform">{{ p.platform === 'twitter' ? '🐦' : '🔴' }}</div>
+            </div>
+            <div class="post-content">{{ (p.content || p.text || '').slice(0, 180) }}{{ (p.content || p.text || '').length > 180 ? '...' : '' }}</div>
+            <div class="post-stats">
+              <span class="ps-like">❤️ {{ p.num_likes || 0 }}</span>
+              <span class="ps-dislike" v-if="p.num_dislikes">👎 {{ p.num_dislikes }}</span>
+              <span class="ps-comments" v-if="p.num_comments">💬 {{ p.num_comments }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ══════════ 10. ANÁLISE PROFUNDA ══════════ -->
       <div class="bloco deep-bloco" v-if="deepSections.length">
         <div class="bloco-label-row">
@@ -1046,6 +1145,31 @@ function abrirChat() {
 .md-body :deep(li) { margin-bottom:7px; }
 .md-body :deep(p) { margin:0 0 12px; }
 
+/* ─── Sentiment ──────────────────────────────────────────────── */
+.sentiment-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:12px; }
+.sent-card { background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;padding:14px; }
+.sent-title { font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:10px; }
+.sent-count { font-size:11px;color:var(--text-muted);font-weight:400;margin-left:6px; }
+.sent-bars { display:flex;flex-direction:column;gap:6px; }
+.sent-row { display:flex;align-items:center;gap:8px; }
+.sent-label { font-size:11px;color:var(--text-muted);min-width:55px; }
+.sent-track { flex:1;height:6px;background:var(--bg-overlay);border-radius:3px;overflow:hidden; }
+.sent-fill { height:100%;border-radius:3px;transition:width .6s ease; }
+.sent-pos { background:#00e5c3; }
+.sent-neu { background:#6b6b80; }
+.sent-neg { background:#ff5a5a; }
+.sent-pct { font-size:11px;font-weight:700;min-width:30px;text-align:right;font-family:monospace; }
+
+/* ─── Posts ──────────────────────────────────────────────── */
+.posts-grid { display:grid;grid-template-columns:repeat(2,1fr);gap:10px; }
+.post-card { background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px; }
+.post-header { display:flex;align-items:center;justify-content:space-between; }
+.post-author { font-size:13px;font-weight:700;color:var(--text-primary); }
+.post-platform { font-size:14px; }
+.post-content { font-size:12.5px;color:var(--text-secondary);line-height:1.6; }
+.post-stats { display:flex;gap:12px;font-size:11px;color:var(--text-muted); }
+.ps-like { color:#ff5a5a; }
+
 /* ─── Doc footer ─────────────────────────────────────────────── */
 .doc-foot { display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);padding:12px 4px;border-top:1px solid var(--border); }
 
@@ -1091,7 +1215,7 @@ function abrirChat() {
 
   /* White background for ALL cards */
   .bloco,.kpi-card,.chart-bloco,.cen-card,.agent-card,.prob-section,
-  .risk-card,.rec-card,.insight-card,.pred-card,.cta-bar,.deep-bloco { background:#fff !important;border-color:#e0e0ee !important; }
+  .risk-card,.rec-card,.insight-card,.pred-card,.cta-bar,.deep-bloco,.sent-card,.post-card { background:#fff !important;border-color:#e0e0ee !important; }
 
   /* Text colors for readability */
   .md-body,.md-body :deep(*) { color:#2a2a3e !important; }
@@ -1116,6 +1240,8 @@ function abrirChat() {
   .bloco-2col { grid-template-columns:1fr; }
   .cen-grid { grid-template-columns:1fr; }
   .insights-grid,.pred-grid { grid-template-columns:1fr; }
+  .sentiment-grid { grid-template-columns:1fr; }
+  .posts-grid { grid-template-columns:1fr; }
   .agents-grid { grid-template-columns:repeat(2,1fr); }
   .deep-tabs { flex-wrap:wrap; }
   .cta-inner { flex-direction:column;text-align:center; }
