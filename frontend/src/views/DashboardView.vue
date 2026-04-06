@@ -120,6 +120,7 @@ function navSim(s) {
 <template>
   <AppShell title="Dashboard">
     <template #actions>
+      <button class="btn-comp" @click="router.push('/comparar')">📊 Comparar</button>
       <button class="btn-nova" @click="router.push('/projeto/novo')">+ Novo Projeto</button>
     </template>
 
@@ -271,6 +272,8 @@ function navSim(s) {
 
 /* Botoes */
 .btn-nova { background:var(--accent);color:#000;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer; }
+.btn-comp { background:none;border:1px solid var(--accent2);color:var(--accent2);border-radius:8px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s; }
+.btn-comp:hover { background:rgba(124,111,247,0.1); }
 .btn-nova:hover { opacity:.85; }
 .btn-nova-lg { background:var(--accent);color:#000;border:none;border-radius:10px;padding:13px 28px;font-size:15px;font-weight:700;cursor:pointer; }
 
