@@ -10,9 +10,13 @@ const router = useRouter()
 const report     = ref(null)
 const analytics  = ref(null)
 const posts      = ref([])
+const simConfig  = ref(null)
+const roundDetails = ref([])
 const carregando = ref(true)
 const erro       = ref('')
 const deepTab    = ref(0)
+const showToc    = ref(false)
+const copiado    = ref(false)
 
 onMounted(async () => {
   carregando.value = true
@@ -34,6 +38,29 @@ onMounted(async () => {
         const rd = (rdPosts?.data?.data?.posts || rdPosts?.data?.posts || []).map(p => ({ ...p, platform: 'reddit' }))
         posts.value = [...tw, ...rd].sort((a, b) => (b.num_likes || 0) - (a.num_likes || 0))
       } catch { /* posts sao opcionais */ }
+      // Carregar config da simulação
+      try {
+        const cRes = await service.get(`/api/simulation/${raw.simulation_id}/config`)
+        simConfig.value = cRes?.data?.data || cRes?.data || null
+      } catch {}
+      // Carregar detalhes por rodada
+      try {
+        const dRes = await service.get(`/api/simulation/${raw.simulation_id}/run-status/detail`)
+        const dRaw = dRes?.data?.data || dRes?.data || {}
+        const actions = dRaw?.all_actions || []
+        // Agrupar por rodada
+        const byRound = {}
+        actions.forEach(a => {
+          const r = a.round_num || 0
+          if (!byRound[r]) byRound[r] = { round: r, actions: [], agents: new Set(), types: {} }
+          byRound[r].actions.push(a)
+          byRound[r].agents.add(a.agent_name || `Agente ${a.agent_id}`)
+          byRound[r].types[a.action_type] = (byRound[r].types[a.action_type] || 0) + 1
+        })
+        roundDetails.value = Object.values(byRound)
+          .map(r => ({ ...r, agents: [...r.agents], agentCount: r.agents.size, actionCount: r.actions.length }))
+          .sort((a, b) => a.round - b.round)
+      } catch {}
     }
   } catch (e) {
     erro.value = e?.response?.data?.error || e?.message || 'Erro ao carregar relatório.'
@@ -656,6 +683,43 @@ async function exportarPDF() {
     gerandoPDF.value = false
   }
 }
+async function copiarRelatorio() {
+  const el = pageRef.value
+  if (!el) return
+  const text = el.innerText || el.textContent || ''
+  try {
+    await navigator.clipboard.writeText(text)
+    copiado.value = true
+    setTimeout(() => copiado.value = false, 2000)
+  } catch { alert('Não foi possível copiar.') }
+}
+
+function scrollToSection(id) {
+  const el = document.getElementById(id)
+  if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); showToc.value = false }
+}
+
+const tocSections = computed(() => {
+  const secs = [
+    { id: 'sec-resumo', label: 'Resumo Executivo', icon: '📋' },
+    { id: 'sec-cenarios', label: 'Cenários Futuros', icon: '🔭' },
+    { id: 'sec-insights', label: 'Insights', icon: '💡' },
+    { id: 'sec-riscos', label: 'Fatores de Risco', icon: '⚠️' },
+    { id: 'sec-recomendacoes', label: 'Recomendações', icon: '🎯' },
+    { id: 'sec-previsoes', label: 'Previsões', icon: '🚀' },
+    { id: 'sec-timeline', label: 'Timeline', icon: '🕐' },
+    { id: 'sec-sentimento', label: 'Sentimento', icon: '💭' },
+    { id: 'sec-posts', label: 'Posts', icon: '📝' },
+    { id: 'sec-achados', label: 'Achados', icon: '⭐' },
+    { id: 'sec-nuvem', label: 'Nuvem de Palavras', icon: '☁️' },
+    { id: 'sec-heatmap', label: 'Mapa de Atividade', icon: '🔥' },
+    { id: 'sec-rodadas', label: 'Por Rodada', icon: '🔄' },
+    { id: 'sec-config', label: 'Configuração', icon: '⚙️' },
+    { id: 'sec-deep', label: 'Análise Profunda', icon: 'ℹ️' },
+  ]
+  return secs
+})
+
 function abrirChat() {
   // Navigate to interaction/chat view if available
   const rid = route.params.reportId
@@ -671,11 +735,33 @@ function abrirChat() {
       <AugurButton variant="ghost" @click="router.push(`/simulacao/${report?.simulation_id}/posts`)" class="np" v-if="report?.simulation_id">📝 Posts</AugurButton>
       <AugurButton variant="ghost" @click="router.push(`/simulacao/${report?.simulation_id}/influentes`)" class="np" v-if="report?.simulation_id">👑 Influentes</AugurButton>
       <AugurButton variant="ghost" @click="router.push('/comparar')" class="np">📊 Comparar</AugurButton>
+      <AugurButton variant="ghost" @click="copiarRelatorio" class="np">
+        {{ copiado ? '✅ Copiado!' : '📋 Copiar' }}
+      </AugurButton>
+      <AugurButton variant="ghost" @click="showToc = !showToc" class="np">🗂 Índice</AugurButton>
       <AugurButton @click="exportarPDF" :disabled="gerandoPDF" class="np">
         <span v-if="gerandoPDF">⏳ Gerando PDF...</span>
         <span v-else>⬇ Exportar PDF</span>
       </AugurButton>
     </template>
+
+    <!-- Floating Table of Contents -->
+    <Transition name="toc-fade">
+      <div v-if="showToc && report" class="toc-overlay" @click.self="showToc=false">
+        <div class="toc-panel">
+          <div class="toc-header">
+            <span class="toc-title">🗂 Índice do Relatório</span>
+            <button class="toc-close" @click="showToc=false">×</button>
+          </div>
+          <div class="toc-list">
+            <div v-for="s in tocSections" :key="s.id" class="toc-item" @click="scrollToSection(s.id)">
+              <span class="toc-icon">{{ s.icon }}</span>
+              <span class="toc-label">{{ s.label }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
 
     <div v-if="carregando" class="loading np">
       <div class="spin"></div>
@@ -715,7 +801,7 @@ function abrirChat() {
 
       <!-- ══════════ 1. RESUMO EXECUTIVO ══════════ -->
       <div class="bloco resumo-bloco">
-        <div class="bloco-label">RESUMO EXECUTIVO</div>
+        <div id="sec-resumo" class="bloco-label">RESUMO EXECUTIVO</div>
         <div class="resumo-inner">
           <div class="gauge-wrap">
             <svg viewBox="0 0 120 80" class="gauge-svg">
@@ -797,7 +883,7 @@ function abrirChat() {
       <!-- ══════════ 4. CENÁRIOS FUTUROS ══════════ -->
       <div class="bloco" v-if="secCenarios">
         <div class="bloco-label-row">
-          <span class="bloco-label">🔭 Cenários Futuros</span>
+          <span id="sec-cenarios" class="bloco-label">🔭 Cenários Futuros</span>
           <span class="bloco-count">{{ cenarios.length }}</span>
         </div>
         <div class="prob-section">
@@ -826,7 +912,7 @@ function abrirChat() {
       <!-- ══════════ 5. INSIGHTS PRINCIPAIS ══════════ -->
       <div class="bloco" v-if="parsedInsights.length">
         <div class="bloco-label-row">
-          <span class="bloco-label">💡 Insights Principais</span>
+          <span id="sec-insights" class="bloco-label">💡 Insights Principais</span>
           <span class="bloco-count">{{ parsedInsights.length }}</span>
         </div>
         <div class="insights-grid">
@@ -840,7 +926,7 @@ function abrirChat() {
       <!-- ══════════ 6. FATORES DE RISCO ══════════ -->
       <div class="bloco" v-if="parsedRiscos.length">
         <div class="bloco-label-row">
-          <span class="bloco-label">⚠️ Fatores de Risco</span>
+          <span id="sec-riscos" class="bloco-label">⚠️ Fatores de Risco</span>
           <span class="bloco-count">{{ parsedRiscos.length }}</span>
         </div>
         <div class="risk-list">
@@ -862,7 +948,7 @@ function abrirChat() {
       <!-- ══════════ 7. RECOMENDAÇÕES ESTRATÉGICAS ══════════ -->
       <div class="bloco" v-if="parsedRecomendacoes.length">
         <div class="bloco-label-row">
-          <span class="bloco-label">🎯 Recomendações Estratégicas</span>
+          <span id="sec-recomendacoes" class="bloco-label">🎯 Recomendações Estratégicas</span>
           <span class="bloco-count">{{ parsedRecomendacoes.length }}</span>
         </div>
         <div class="rec-list">
@@ -883,7 +969,7 @@ function abrirChat() {
       <!-- ══════════ 8. PREVISÕES ══════════ -->
       <div class="bloco" v-if="parsedPrevisoes.length">
         <div class="bloco-label-row">
-          <span class="bloco-label">🚀 Previsões</span>
+          <span id="sec-previsoes" class="bloco-label">🚀 Previsões</span>
           <span class="bloco-count">{{ parsedPrevisoes.length }}</span>
         </div>
         <div class="pred-grid">
@@ -897,7 +983,7 @@ function abrirChat() {
       <!-- ══════════ 9. TIMELINE DE EVENTOS ══════════ -->
       <div class="bloco" v-if="parsedTimeline.length">
         <div class="bloco-label-row">
-          <span class="bloco-label">🕐 Timeline de Eventos</span>
+          <span id="sec-timeline" class="bloco-label">🕐 Timeline de Eventos</span>
           <span class="bloco-count">{{ parsedTimeline.length }}</span>
         </div>
         <div class="timeline">
@@ -918,7 +1004,7 @@ function abrirChat() {
       <!-- ══════════ SENTIMENTO DA SIMULAÇÃO ══════════ -->
       <div class="bloco" v-if="sentimentData">
         <div class="bloco-label-row">
-          <span class="bloco-label">💭 Análise de Sentimento</span>
+          <span id="sec-sentimento" class="bloco-label">💭 Análise de Sentimento</span>
           <span class="bloco-count">{{ sentimentData.geral.total }} posts</span>
         </div>
         <div class="sentiment-grid">
@@ -964,7 +1050,7 @@ function abrirChat() {
       <!-- ══════════ TOP POSTS DOS AGENTES ══════════ -->
       <div class="bloco" v-if="topPosts.length">
         <div class="bloco-label-row">
-          <span class="bloco-label">📝 Posts Mais Relevantes dos Agentes</span>
+          <span id="sec-posts" class="bloco-label">📝 Posts Mais Relevantes dos Agentes</span>
           <span class="bloco-count">{{ topPosts.length }}</span>
         </div>
         <div class="posts-grid">
@@ -986,7 +1072,7 @@ function abrirChat() {
       <!-- ══════════ ACHADOS RELEVANTES ══════════ -->
       <div class="bloco" v-if="achadosRelevantes.length">
         <div class="bloco-label-row">
-          <span class="bloco-label">⭐ Achados Relevantes</span>
+          <span id="sec-achados" class="bloco-label">⭐ Achados Relevantes</span>
           <span class="bloco-count">{{ achadosRelevantes.length }}</span>
         </div>
         <div class="achados-list">
@@ -1000,7 +1086,7 @@ function abrirChat() {
       <!-- ══════════ NUVEM DE PALAVRAS ══════════ -->
       <div class="bloco" v-if="wordCloud.length">
         <div class="bloco-label-row">
-          <span class="bloco-label">☁️ Nuvem de Palavras — Tópicos Mais Mencionados</span>
+          <span id="sec-nuvem" class="bloco-label">☁️ Nuvem de Palavras — Tópicos Mais Mencionados</span>
           <span class="bloco-count">{{ wordCloud.length }}</span>
         </div>
         <div class="wordcloud">
@@ -1014,7 +1100,7 @@ function abrirChat() {
       <!-- ══════════ MAPA DE CALOR — ATIVIDADE POR RODADA ══════════ -->
       <div class="bloco" v-if="heatmapData">
         <div class="bloco-label-row">
-          <span class="bloco-label">🔥 Mapa de Atividade por Rodada</span>
+          <span id="sec-heatmap" class="bloco-label">🔥 Mapa de Atividade por Rodada</span>
         </div>
         <div class="heatmap">
           <div class="hm-labels">
@@ -1051,10 +1137,84 @@ function abrirChat() {
         </div>
       </div>
 
+      <!-- ══════════ RESUMO POR RODADA ══════════ -->
+      <div class="bloco" v-if="roundDetails.length" id="sec-rodadas">
+        <div class="bloco-label-row">
+          <span class="bloco-label">🔄 O que aconteceu em cada rodada</span>
+          <span class="bloco-count">{{ roundDetails.length }}</span>
+        </div>
+        <div class="rounds-list">
+          <details v-for="rd in roundDetails" :key="rd.round" class="round-detail">
+            <summary class="rd-summary">
+              <span class="rd-badge">R{{ rd.round }}</span>
+              <span class="rd-info">{{ rd.actionCount }} ações · {{ rd.agentCount }} agentes ativos</span>
+              <span class="rd-types">
+                <span v-if="rd.types.CREATE_POST" class="rd-tag">📝 {{ rd.types.CREATE_POST }}</span>
+                <span v-if="rd.types.LIKE_POST" class="rd-tag">❤️ {{ rd.types.LIKE_POST }}</span>
+                <span v-if="rd.types.CREATE_COMMENT" class="rd-tag">💬 {{ rd.types.CREATE_COMMENT }}</span>
+                <span v-if="rd.types.REPOST" class="rd-tag">🔄 {{ rd.types.REPOST }}</span>
+              </span>
+            </summary>
+            <div class="rd-body">
+              <div class="rd-agents">
+                <span class="rd-label">Agentes ativos:</span>
+                {{ rd.agents.slice(0, 8).join(', ') }}{{ rd.agents.length > 8 ? ` +${rd.agents.length - 8}` : '' }}
+              </div>
+              <div class="rd-actions-list">
+                <div v-for="(a, j) in rd.actions.slice(0, 5)" :key="j" class="rd-action">
+                  <span class="rda-agent">{{ a.agent_name || 'Agente ' + a.agent_id }}</span>
+                  <span class="rda-type">{{ {CREATE_POST:'publicou',LIKE_POST:'curtiu',REPOST:'repostou',CREATE_COMMENT:'comentou',FOLLOW:'seguiu',LIKE_COMMENT:'curtiu comentário'}[a.action_type] || a.action_type }}</span>
+                  <span class="rda-plat">{{ a.platform === 'twitter' ? '🐦' : '🔴' }}</span>
+                </div>
+                <div v-if="rd.actions.length > 5" class="rd-more">+{{ rd.actions.length - 5 }} mais ações</div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <!-- ══════════ CONFIGURAÇÃO DA SIMULAÇÃO ══════════ -->
+      <div class="bloco" v-if="simConfig" id="sec-config">
+        <div class="bloco-label-row">
+          <span class="bloco-label">⚙️ Configuração da Simulação</span>
+        </div>
+        <div class="config-grid">
+          <div class="cfg-item" v-if="simConfig.agent_configs">
+            <span class="cfg-icon">🧠</span>
+            <span class="cfg-label">Agentes</span>
+            <span class="cfg-val">{{ Array.isArray(simConfig.agent_configs) ? simConfig.agent_configs.length : '—' }}</span>
+          </div>
+          <div class="cfg-item" v-if="simConfig.time_config">
+            <span class="cfg-icon">⏱</span>
+            <span class="cfg-label">Rodadas</span>
+            <span class="cfg-val">{{ simConfig.time_config.total_rounds || simConfig.time_config.num_rounds || '—' }}</span>
+          </div>
+          <div class="cfg-item" v-if="simConfig.time_config?.hours_per_round">
+            <span class="cfg-icon">🕐</span>
+            <span class="cfg-label">Horas/rodada</span>
+            <span class="cfg-val">{{ simConfig.time_config.hours_per_round }}</span>
+          </div>
+          <div class="cfg-item" v-if="simConfig.platform_configs">
+            <span class="cfg-icon">📱</span>
+            <span class="cfg-label">Plataformas</span>
+            <span class="cfg-val">{{ Object.keys(simConfig.platform_configs).join(', ') }}</span>
+          </div>
+          <div class="cfg-item" v-if="simConfig.event_config?.events">
+            <span class="cfg-icon">⚡</span>
+            <span class="cfg-label">Eventos</span>
+            <span class="cfg-val">{{ simConfig.event_config.events.length }}</span>
+          </div>
+        </div>
+        <div class="cfg-reasoning" v-if="simConfig.generation_reasoning">
+          <div class="cfg-label-sm">Raciocínio da IA ao gerar a configuração:</div>
+          <div class="cfg-text">{{ typeof simConfig.generation_reasoning === 'string' ? simConfig.generation_reasoning.slice(0, 300) : '' }}{{ (simConfig.generation_reasoning?.length || 0) > 300 ? '...' : '' }}</div>
+        </div>
+      </div>
+
       <!-- ══════════ 10. ANÁLISE PROFUNDA ══════════ -->
       <div class="bloco deep-bloco" v-if="deepSections.length">
         <div class="bloco-label-row">
-          <span class="bloco-label">ℹ️ Análise Profunda</span>
+          <span id="sec-deep" class="bloco-label">ℹ️ Análise Profunda</span>
         </div>
         <div class="deep-tabs">
           <button v-for="(ds, i) in deepSections" :key="i" class="deep-tab" :class="{active: deepTab === i}" @click="deepTab = i">
@@ -1095,7 +1255,7 @@ function abrirChat() {
 
       <!-- ══════════ TOP AGENTES ══════════ -->
       <div v-if="analytics && twTopAgents.length" class="bloco">
-        <div class="bloco-label">TOP AGENTES — ANÁLISE DE INFLUÊNCIA</div>
+        <div id="sec-agentes" class="bloco-label">TOP AGENTES — ANÁLISE DE INFLUÊNCIA</div>
         <div class="agents-grid">
           <div v-for="(ag,i) in twTopAgents.slice(0,6)" :key="ag.user_id||i" class="agent-card">
             <div class="ag-rank">#{{ i+1 }}</div>
@@ -1362,6 +1522,49 @@ function abrirChat() {
 .hm-rlbl { flex:1;text-align:center;font-size:9px;color:var(--text-muted);font-weight:600; }
 
 /* ─── Doc footer ─────────────────────────────────────────────── */
+
+/* ─── TOC ────────────────────────────────────────────── */
+.toc-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:100;display:flex;justify-content:flex-end}
+.toc-panel{background:var(--bg-surface);width:260px;height:100%;overflow-y:auto;border-left:1px solid var(--border);padding:0}
+.toc-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
+.toc-title{font-size:14px;font-weight:700;color:var(--text-primary)}
+.toc-close{background:none;border:none;color:var(--text-muted);font-size:24px;cursor:pointer}
+.toc-list{padding:8px}
+.toc-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;cursor:pointer;transition:all .12s;font-size:13px;color:var(--text-secondary)}
+.toc-item:hover{background:var(--bg-raised);color:var(--accent2)}
+.toc-icon{font-size:14px;width:20px;text-align:center}
+.toc-label{font-weight:500}
+.toc-fade-enter-active,.toc-fade-leave-active{transition:opacity .2s}.toc-fade-enter-from,.toc-fade-leave-to{opacity:0}
+
+/* ─── Rounds ────────────────────────────────────────── */
+.rounds-list{display:flex;flex-direction:column;gap:4px}
+.round-detail{background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.round-detail[open]{border-color:var(--accent2)}
+.rd-summary{display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;font-size:13px;list-style:none}
+.rd-summary::-webkit-details-marker{display:none}
+.rd-badge{background:var(--accent2);color:#fff;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;flex-shrink:0}
+.rd-info{color:var(--text-secondary);flex:1}
+.rd-types{display:flex;gap:6px}
+.rd-tag{font-size:10px;color:var(--text-muted)}
+.rd-body{padding:0 16px 14px;border-top:1px solid var(--border)}
+.rd-agents{font-size:12px;color:var(--text-muted);margin-top:10px;line-height:1.6}
+.rd-label{font-weight:700;color:var(--text-secondary)}
+.rd-actions-list{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.rd-action{display:flex;gap:8px;font-size:12px;padding:4px 0}
+.rda-agent{font-weight:600;color:var(--text-primary);min-width:120px}
+.rda-type{color:var(--text-muted)}
+.rda-plat{font-size:11px}
+.rd-more{font-size:11px;color:var(--accent2);font-weight:600;padding:4px 0}
+
+/* ─── Config ────────────────────────────────────────── */
+.config-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+.cfg-item{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px;background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;text-align:center}
+.cfg-icon{font-size:18px}
+.cfg-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
+.cfg-val{font-size:16px;font-weight:800;color:var(--text-primary);font-family:monospace}
+.cfg-reasoning{background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;padding:14px}
+.cfg-label-sm{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px}
+.cfg-text{font-size:12px;color:var(--text-secondary);line-height:1.7;font-style:italic}
 .doc-foot { display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);padding:12px 4px;border-top:1px solid var(--border); }
 
 /* ─── Print-only elements ─────────────────────────────────── */
