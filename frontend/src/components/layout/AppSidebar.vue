@@ -124,6 +124,13 @@ watch(() => route.path, () => { carregarDados() })
         </svg>
         <span>Dashboard</span>
       </div>
+      <div class="footer-link" @click="router.push('/comparar')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13">
+          <line x1="1" y1="12" x2="5" y2="4"/><line x1="5" y1="4" x2="9" y2="8"/><line x1="9" y1="8" x2="15" y2="2"/>
+          <line x1="1" y1="14" x2="15" y2="14"/>
+        </svg>
+        <span>Comparar</span>
+      </div>
       <div class="footer-workspace">Workspace</div>
     </div>
 
