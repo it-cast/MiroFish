@@ -10,6 +10,8 @@ import GraphView        from '../views/GraphView.vue'
 import AgentesView      from '../views/AgentesView.vue'
 import InfluentesView   from '../views/InfluentesView.vue'
 import CompararView     from '../views/CompararView.vue'
+import AgentProfileView from '../views/AgentProfileView.vue'
+import PostsTimelineView from '../views/PostsTimelineView.vue'
 
 const routes = [
   {
@@ -56,6 +58,20 @@ const routes = [
     path: '/simulacao/:simulationId/influentes',
     name: 'Influentes',
     component: InfluentesView,
+    props: true
+  },
+  {
+    // Perfil completo de um agente
+    path: '/simulacao/:simulationId/agente/:agentId',
+    name: 'AgentProfile',
+    component: AgentProfileView,
+    props: true
+  },
+  {
+    // Timeline de todos os posts
+    path: '/simulacao/:simulationId/posts',
+    name: 'PostsTimeline',
+    component: PostsTimelineView,
     props: true
   },
   {
