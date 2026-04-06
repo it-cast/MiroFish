@@ -17,11 +17,19 @@ logger = logging.getLogger(__name__)
 
 analytics_bp = Blueprint('analytics', __name__)
 
-UPLOADS_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'uploads')
+# Usar Config para consistência com simulation.py
+from ..config import Config
 
 
 def _sim_dir(simulation_id: str) -> str:
-    return os.path.join(UPLOADS_DIR, 'simulations', simulation_id)
+    primary = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, simulation_id)
+    if os.path.exists(primary):
+        return primary
+    for alt in [f'/app/uploads/simulations/{simulation_id}',
+                os.path.join(os.path.dirname(__file__), '..', '..', 'uploads', 'simulations', simulation_id)]:
+        if os.path.exists(alt):
+            return alt
+    return primary
 
 
 def _query_db(db_path: str, query: str, params=()):
