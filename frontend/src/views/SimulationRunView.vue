@@ -578,19 +578,19 @@ onUnmounted(() => { if (reportPollTimer.value) clearInterval(reportPollTimer.val
       <div class="cr">
         <div class="st">REDE DE AGENTES</div>
         <svg :viewBox="`0 0 ${NET} ${NET}`" class="net-svg" preserveAspectRatio="xMidYMid meet">
-          <circle :cx="NET/2" :cy="NET/2" r="45" fill="none" stroke="rgba(255,255,255,0.04)"/>
-          <circle :cx="NET/2" :cy="NET/2" r="75" fill="none" stroke="rgba(255,255,255,0.03)"/>
+          <circle :cx="NET/2" :cy="NET/2" r="45" fill="none" stroke="rgba(0,0,0,0.06)"/>
+          <circle :cx="NET/2" :cy="NET/2" r="75" fill="none" stroke="rgba(0,0,0,0.04)"/>
           <line v-for="(e,i) in netEdges" :key="'e'+i"
             :x1="e.x1" :y1="e.y1" :x2="e.x2" :y2="e.y2"
             :stroke-width="e.w || 1" stroke="rgba(255,255,255,0.08)" stroke-linecap="round"/>
           <g v-for="(n,i) in agentNodes" :key="'n'+i">
             <circle :cx="n.x" :cy="n.y" :r="n.size+2" :fill="ROLE_COLORS[n.role]" opacity="0.12"/>
             <circle :cx="n.x" :cy="n.y" :r="n.size"
-              :fill="n.active ? ROLE_COLORS[n.role] : 'rgba(255,255,255,0.15)'"
+              :fill="n.active ? ROLE_COLORS[n.role] : 'rgba(0,0,0,0.08)'"
               :opacity="n.active ? 0.95 : 0.3"
               :class="{'np': n.active && !concluida}"/>
             <text v-if="n.name" :x="n.x" :y="n.y + n.size + 8" text-anchor="middle"
-              fill="var(--text-muted)" font-size="4" font-weight="600" opacity="0.7">{{ n.name }}</text>
+              fill="var(--text-secondary)" font-size="4" font-weight="600" opacity="0.8">{{ n.name }}</text>
           </g>
         </svg>
         <div class="net-leg">
