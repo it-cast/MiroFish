@@ -832,7 +832,7 @@ function abrirChat() {
 
       <!-- ══════════ 2. KPI CARDS ══════════ -->
       <div v-if="kpiCards.length" class="kpi-row">
-        <div v-for="k in kpiCards" :key="k.label" class="kpi-card">
+        <div v-for="k in kpiCards" :key="k.label" class="kpi-card" :title="`${kpi.label}: ${kpi.valor} ${kpi.sub || ''}`">
           <div class="kpi-header">
             <div class="kpi-label">{{ k.label }}</div>
             <svg v-if="k.trend==='up'" viewBox="0 0 10 10" width="10" height="10"><polyline points="1,8 5,2 9,8" fill="none" stroke="#00e5c3" stroke-width="2"/></svg>
@@ -1013,7 +1013,7 @@ function abrirChat() {
             <div class="sent-bars">
               <div class="sent-row">
                 <span class="sent-label">Positivo</span>
-                <div class="sent-track"><div class="sent-fill sent-pos" :style="{width: sentimentData.geral.pos+'%'}"></div></div>
+                <div class="sent-track"><div class="sent-fill sent-pos" :title="`Positivo: ${sentimentData.geral.pos}%`" :style="{width: sentimentData.geral.pos+'%'}"></div></div>
                 <span class="sent-pct" style="color:#00e5c3">{{ sentimentData.geral.pos }}%</span>
               </div>
               <div class="sent-row">
@@ -1023,7 +1023,7 @@ function abrirChat() {
               </div>
               <div class="sent-row">
                 <span class="sent-label">Negativo</span>
-                <div class="sent-track"><div class="sent-fill sent-neg" :style="{width: sentimentData.geral.neg+'%'}"></div></div>
+                <div class="sent-track"><div class="sent-fill sent-neg" :title="`Negativo: ${sentimentData.geral.neg}%`" :style="{width: sentimentData.geral.neg+'%'}"></div></div>
                 <span class="sent-pct" style="color:#ff5a5a">{{ sentimentData.geral.neg }}%</span>
               </div>
             </div>
@@ -1031,17 +1031,17 @@ function abrirChat() {
           <div class="sent-card" v-if="sentimentData.twitter.total">
             <div class="sent-title">🐦 Twitter <span class="sent-count">{{ sentimentData.twitter.total }}</span></div>
             <div class="sent-bars">
-              <div class="sent-row"><span class="sent-label">Positivo</span><div class="sent-track"><div class="sent-fill sent-pos" :style="{width: sentimentData.twitter.pos+'%'}"></div></div><span class="sent-pct" style="color:#00e5c3">{{ sentimentData.twitter.pos }}%</span></div>
+              <div class="sent-row"><span class="sent-label">Positivo</span><div class="sent-track"><div class="sent-fill sent-pos" :title="`Positivo: ${sentimentData.geral.pos}%`" :style="{width: sentimentData.twitter.pos+'%'}"></div></div><span class="sent-pct" style="color:#00e5c3">{{ sentimentData.twitter.pos }}%</span></div>
               <div class="sent-row"><span class="sent-label">Neutro</span><div class="sent-track"><div class="sent-fill sent-neu" :style="{width: sentimentData.twitter.neu+'%'}"></div></div><span class="sent-pct" style="color:#6b6b80">{{ sentimentData.twitter.neu }}%</span></div>
-              <div class="sent-row"><span class="sent-label">Negativo</span><div class="sent-track"><div class="sent-fill sent-neg" :style="{width: sentimentData.twitter.neg+'%'}"></div></div><span class="sent-pct" style="color:#ff5a5a">{{ sentimentData.twitter.neg }}%</span></div>
+              <div class="sent-row"><span class="sent-label">Negativo</span><div class="sent-track"><div class="sent-fill sent-neg" :title="`Negativo: ${sentimentData.geral.neg}%`" :style="{width: sentimentData.twitter.neg+'%'}"></div></div><span class="sent-pct" style="color:#ff5a5a">{{ sentimentData.twitter.neg }}%</span></div>
             </div>
           </div>
           <div class="sent-card" v-if="sentimentData.reddit.total">
             <div class="sent-title">🔴 Reddit <span class="sent-count">{{ sentimentData.reddit.total }}</span></div>
             <div class="sent-bars">
-              <div class="sent-row"><span class="sent-label">Positivo</span><div class="sent-track"><div class="sent-fill sent-pos" :style="{width: sentimentData.reddit.pos+'%'}"></div></div><span class="sent-pct" style="color:#00e5c3">{{ sentimentData.reddit.pos }}%</span></div>
+              <div class="sent-row"><span class="sent-label">Positivo</span><div class="sent-track"><div class="sent-fill sent-pos" :title="`Positivo: ${sentimentData.geral.pos}%`" :style="{width: sentimentData.reddit.pos+'%'}"></div></div><span class="sent-pct" style="color:#00e5c3">{{ sentimentData.reddit.pos }}%</span></div>
               <div class="sent-row"><span class="sent-label">Neutro</span><div class="sent-track"><div class="sent-fill sent-neu" :style="{width: sentimentData.reddit.neu+'%'}"></div></div><span class="sent-pct" style="color:#6b6b80">{{ sentimentData.reddit.neu }}%</span></div>
-              <div class="sent-row"><span class="sent-label">Negativo</span><div class="sent-track"><div class="sent-fill sent-neg" :style="{width: sentimentData.reddit.neg+'%'}"></div></div><span class="sent-pct" style="color:#ff5a5a">{{ sentimentData.reddit.neg }}%</span></div>
+              <div class="sent-row"><span class="sent-label">Negativo</span><div class="sent-track"><div class="sent-fill sent-neg" :title="`Negativo: ${sentimentData.geral.neg}%`" :style="{width: sentimentData.reddit.neg+'%'}"></div></div><span class="sent-pct" style="color:#ff5a5a">{{ sentimentData.reddit.neg }}%</span></div>
             </div>
           </div>
         </div>
