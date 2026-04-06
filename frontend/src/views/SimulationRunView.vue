@@ -559,7 +559,6 @@ onUnmounted(() => { if (reportPollTimer.value) clearInterval(reportPollTimer.val
             <text v-if="n.name" :x="n.x" :y="n.y + n.size + 8" text-anchor="middle"
               fill="var(--text-muted)" font-size="4" font-weight="600" opacity="0.7">{{ n.name }}</text>
           </g>
-          </g>
         </svg>
         <div class="net-leg">
           <span v-for="(cor, r) in ROLE_COLORS" :key="r" :style="{color:cor}">● {{ r }}</span>
