@@ -292,9 +292,13 @@ onUnmounted(() => { if (reportPollTimer.value) clearInterval(reportPollTimer.val
       <div v-if="concluida" class="banner banner-done">
         <span class="bi">🎉</span>
         <div class="bb"><div class="bt">Simulação concluída!</div><div class="bs" v-if="temRelatorio">Relatório pronto.</div><div class="bs" v-else-if="gerandoRelatorio">Gerando relatório...</div></div>
-        <button v-if="temRelatorio" class="btn-rel" @click="verRelatorio">📊 Ver Relatório →</button>
-        <div v-else-if="gerandoRelatorio" class="gerando-tag"><div class="mspin"></div></div>
-        <button v-else class="btn-g" @click="voltarProjeto">← Projeto</button>
+        <div class="banner-actions">
+          <button class="btn-sec" @click="router.push(`/simulacao/${route.params.simulationId}/agentes`)">🧠 Agentes</button>
+          <button class="btn-sec" @click="router.push(`/simulacao/${route.params.simulationId}/influentes`)">👑 Influentes</button>
+          <button v-if="temRelatorio" class="btn-rel" @click="verRelatorio">📊 Ver Relatório →</button>
+          <div v-else-if="gerandoRelatorio" class="gerando-tag"><div class="mspin"></div></div>
+          <button v-else class="btn-g" @click="voltarProjeto">← Projeto</button>
+        </div>
       </div>
     </Transition>
     <Transition name="sd">
@@ -487,6 +491,9 @@ onUnmounted(() => { if (reportPollTimer.value) clearInterval(reportPollTimer.val
 .gerando-tag { display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-muted); }
 .btn-rel { background:var(--accent);color:#000;border:none;border-radius:8px;padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer; }
 .btn-rel:hover { opacity:.85; }
+.btn-sec { background:none;border:1px solid var(--border-md);color:var(--accent2);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s; }
+.btn-sec:hover { background:var(--accent2-dim);border-color:var(--accent2); }
+.banner-actions { display:flex;gap:8px;align-items:center; }
 .btn-g { background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer; }
 
 /* Banners */
