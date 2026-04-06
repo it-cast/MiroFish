@@ -302,9 +302,23 @@ def get_report(report_id: str):
                 "error": t('api.reportNotFound', id=report_id)
             }), 404
         
+        report_dict = report.to_dict()
+        
+        # Adicionar project_id via simulation (não está no Report model)
+        if report_dict.get('simulation_id') and not report_dict.get('project_id'):
+            try:
+                from ..services.simulation_manager import SimulationManager
+                manager = SimulationManager()
+                sims = manager.list_simulations()
+                sim = next((s for s in sims if s.simulation_id == report_dict['simulation_id']), None)
+                if sim:
+                    report_dict['project_id'] = sim.project_id
+            except Exception:
+                pass
+        
         return jsonify({
             "success": True,
-            "data": report.to_dict()
+            "data": report_dict
         })
         
     except Exception as e:
