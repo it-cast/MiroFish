@@ -6,6 +6,7 @@ import SimulationView   from '../views/SimulationView.vue'
 import SimulationRunView from '../views/SimulationRunView.vue'
 import ReportView       from '../views/ReportView.vue'
 import InteractionView  from '../views/InteractionView.vue'
+import GraphView        from '../views/GraphView.vue'
 
 const routes = [
   {
@@ -57,6 +58,13 @@ const routes = [
     path: '/agentes/:reportId',
     name: 'Agentes',
     component: InteractionView,
+    props: true
+  },
+  {
+    // Grafo de conhecimento do projeto
+    path: '/projeto/:projectId/grafo',
+    name: 'Grafo',
+    component: GraphView,
     props: true
   },
   {
