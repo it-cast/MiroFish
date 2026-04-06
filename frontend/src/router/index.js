@@ -7,6 +7,8 @@ import SimulationRunView from '../views/SimulationRunView.vue'
 import ReportView       from '../views/ReportView.vue'
 import InteractionView  from '../views/InteractionView.vue'
 import GraphView        from '../views/GraphView.vue'
+import AgentesView      from '../views/AgentesView.vue'
+import InfluentesView   from '../views/InfluentesView.vue'
 
 const routes = [
   {
@@ -15,60 +17,66 @@ const routes = [
     component: DashboardView
   },
   {
-    // Rota principal de criação — /projeto/novo
     path: '/projeto/novo',
     name: 'NovoProjeto',
     component: NovoProjetoView
   },
   {
-    // Detalhe do projeto com lista de simulações
     path: '/projeto/:projectId',
     name: 'Projeto',
     component: ProjetoView,
     props: true
   },
   {
-    // /novo redireciona para /projeto/novo (mantém compatibilidade)
     path: '/novo',
     redirect: '/projeto/novo'
   },
   {
-    // Pipeline de preparação: construção do grafo → criar sim → preparar → iniciar
     path: '/simulacao/:projectId',
     name: 'Simulacao',
     component: SimulationView,
     props: true
   },
   {
-    // Execução ao vivo da simulação
     path: '/simulacao/:simulationId/executar',
     name: 'Execucao',
     component: SimulationRunView,
     props: true
   },
   {
-    // Relatório analítico
+    // Agentes da simulacao — grid com perfis
+    path: '/simulacao/:simulationId/agentes',
+    name: 'Agentes',
+    component: AgentesView,
+    props: true
+  },
+  {
+    // Ranking de influencia + mapa de coalizoes
+    path: '/simulacao/:simulationId/influentes',
+    name: 'Influentes',
+    component: InfluentesView,
+    props: true
+  },
+  {
     path: '/relatorio/:reportId',
     name: 'Relatorio',
     component: ReportView,
     props: true
   },
   {
-    // Entrevista com agentes
+    // Chat com ReportAgent
     path: '/agentes/:reportId',
-    name: 'Agentes',
+    name: 'ChatAgentes',
     component: InteractionView,
     props: true
   },
   {
-    // Grafo de conhecimento do projeto
     path: '/projeto/:projectId/grafo',
     name: 'Grafo',
     component: GraphView,
     props: true
   },
   {
-    // Fallback — qualquer rota não encontrada vai para home
     path: '/:pathMatch(.*)*',
     redirect: '/'
   }
