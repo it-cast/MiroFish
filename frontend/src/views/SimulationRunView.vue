@@ -215,10 +215,10 @@ async function carregarProjectId() {
   try {
     // Tenta via simulation list para obter project_id
     const res = await service.get('/api/simulation/list', {
-      params: { limit: 100 }
+      params: { limit: 500 }
     })
     const raw = res?.data?.data || res?.data || res
-    const lista = Array.isArray(raw) ? raw : (raw?.simulations || raw?.history || [])
+    const lista = Array.isArray(raw) ? raw : (raw?.simulations || raw?.data || [])
     const sim = lista.find(s => s.simulation_id === route.params.simulationId)
     if (sim?.project_id) {
       status.value.project_id = sim.project_id
