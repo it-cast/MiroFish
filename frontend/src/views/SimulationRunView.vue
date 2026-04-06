@@ -33,6 +33,8 @@ const reportPollTimer  = ref(null)
 const roundHistory = ref([])
 const lastRound    = ref(0)
 const eventLog     = ref([])
+const realActions  = ref([])
+const realAgentMap = ref({})
 
 const simStatus    = computed(() => status.value.runner_status)
 const temRelatorio = computed(() => !!status.value.report_id)
@@ -108,39 +110,116 @@ const evoChart = computed(() => {
 // Rede de agentes (layout radial)
 const NET = 190
 const agentNodes = computed(() => {
-  const count = 14
-  const prog  = progresso.value
-  return Array.from({ length: count }, (_, i) => {
-    const angle = (i / count) * 2 * Math.PI
-    const r = 45 + (i % 3) * 18
-    const jx = Math.sin(i * 17) * 8
-    const jy = Math.cos(i * 13) * 7
-    const roles = ['inovador', 'conservador', 'mediador', 'lider', 'opositor']
+  const map = realAgentMap.value
+  const names = Object.keys(map)
+  
+  // Se não tem dados reais ainda, gerar placeholder baseado no progresso
+  if (names.length === 0) {
+    const count = Math.max(8, Math.min(30, status.value.total_entities || 14))
+    const prog = progresso.value
+    return Array.from({ length: count }, (_, i) => {
+      const angle = (i / count) * 2 * Math.PI
+      const r = 35 + (i % 3) * 20
+      const roles = ['inovador', 'conservador', 'mediador', 'lider', 'opositor']
+      return {
+        x: NET / 2 + r * Math.cos(angle) + Math.sin(i * 17) * 6,
+        y: NET / 2 + r * Math.sin(angle) + Math.cos(i * 13) * 5,
+        role: roles[i % roles.length],
+        active: i <= Math.floor((prog / 100) * count) + 2,
+        size: 3.5 + (i % 3) * 0.8,
+        name: '',
+      }
+    })
+  }
+  
+  // Rede REAL baseada em dados de interação
+  const maxActions = Math.max(...Object.values(map).map(a => a.actions), 1)
+  return names.map((id, i) => {
+    const agent = map[id]
+    const angle = (i / names.length) * 2 * Math.PI
+    const r = 30 + Math.min(agent.actions / maxActions, 1) * 50
+    // Classificar por tipo dominante de ação
+    const types = agent.types || {}
+    let role = 'mediador'
+    if ((types.CREATE_POST || 0) > (types.LIKE_POST || 0)) role = 'lider'
+    else if ((types.LIKE_POST || 0) > 3) role = 'conservador'
+    if ((types.REPOST || 0) > 2) role = 'inovador'
+    if ((types.CREATE_COMMENT || 0) > 2) role = 'opositor'
+    
     return {
-      x: NET / 2 + r * Math.cos(angle) + jx,
-      y: NET / 2 + r * Math.sin(angle) + jy,
-      role: roles[i % roles.length],
-      active: i <= Math.floor((prog / 100) * count) + 2,
-      size: 3.5 + (i % 3) * 0.8,
+      x: NET / 2 + r * Math.cos(angle),
+      y: NET / 2 + r * Math.sin(angle),
+      role,
+      active: true,
+      size: 3 + (agent.actions / maxActions) * 5,
+      name: (agent.name || '').split(' ')[0],
+      agentId: id,
     }
   })
 })
 
 const netEdges = computed(() => {
+  const actions = realActions.value
   const nodes = agentNodes.value
-  const edges = []
-  for (let i = 0; i < nodes.length; i++) {
-    for (let j = i + 1; j < nodes.length; j++) {
-      const dx = nodes[i].x - nodes[j].x
-      const dy = nodes[i].y - nodes[j].y
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      if (dist < 60 && edges.length < 20) edges.push(nodes[i].x, nodes[i].y, nodes[j].x, nodes[j].y)
+  
+  // Se não tem dados reais, usar proximidade
+  if (!actions.length || !Object.keys(realAgentMap.value).length) {
+    const edges = []
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y
+        if (Math.sqrt(dx*dx + dy*dy) < 55 && edges.length < 20) {
+          edges.push({ x1: nodes[i].x, y1: nodes[i].y, x2: nodes[j].x, y2: nodes[j].y, w: 1 })
+        }
+      }
     }
+    return edges
   }
-  return edges.reduce((acc, _, i, arr) => {
-    if (i % 4 === 0) acc.push({ x1: arr[i], y1: arr[i+1], x2: arr[i+2], y2: arr[i+3] })
-    return acc
-  }, [])
+  
+  // Edges REAIS: interações entre agentes
+  const interactions = {}
+  actions.forEach(a => {
+    // LIKE_POST e CREATE_COMMENT implicam interação com o autor do post
+    if (['LIKE_POST','REPOST','CREATE_COMMENT','LIKE_COMMENT'].includes(a.action_type) && a.action_args?.target_agent_id !== undefined) {
+      const key = [a.agent_id, a.action_args.target_agent_id].sort().join('-')
+      interactions[key] = (interactions[key] || 0) + 1
+    }
+  })
+  
+  // Mapear agent_id → node index
+  const idToIdx = {}
+  Object.keys(realAgentMap.value).forEach((id, i) => { idToIdx[id] = i })
+  
+  const edges = []
+  Object.entries(interactions).forEach(([key, count]) => {
+    const [a, b] = key.split('-')
+    const ni = nodes[idToIdx[a]], nj = nodes[idToIdx[b]]
+    if (ni && nj) {
+      edges.push({ x1: ni.x, y1: ni.y, x2: nj.x, y2: nj.y, w: Math.min(count, 4) })
+    }
+  })
+  
+  // Se não encontrou edges por target, usar co-ocorrência na mesma rodada
+  if (edges.length < 3) {
+    const roundAgents = {}
+    actions.forEach(a => {
+      if (!roundAgents[a.round_num]) roundAgents[a.round_num] = new Set()
+      roundAgents[a.round_num].add(a.agent_id ?? a.agent_name)
+    })
+    Object.values(roundAgents).forEach(agentSet => {
+      const arr = [...agentSet]
+      for (let i = 0; i < arr.length && edges.length < 30; i++) {
+        for (let j = i + 1; j < arr.length && edges.length < 30; j++) {
+          const ni = nodes[idToIdx[arr[i]]], nj = nodes[idToIdx[arr[j]]]
+          if (ni && nj && !edges.some(e => e.x1===ni.x && e.y1===ni.y && e.x2===nj.x && e.y2===nj.y)) {
+            edges.push({ x1: ni.x, y1: ni.y, x2: nj.x, y2: nj.y, w: 1 })
+          }
+        }
+      }
+    })
+  }
+  
+  return edges.slice(0, 40)
 })
 
 const ROLE_COLORS = { inovador: '#00e5c3', conservador: '#7c6ff7', mediador: '#f5a623', lider: '#1da1f2', opositor: '#ff5a5a' }
@@ -167,16 +246,43 @@ async function carregarStatus() {
         iv: inovacao.value,
         ts: tensao.value,
       })
-      const acoes = ['publicou sobre o tema', 'reagiu à hipótese', 'debateu com outros agentes', 'compartilhou análise', 'questionou o cenário']
-      const agents = ['Agente ' + (raw.current_round * 3 % 30 + 1), 'Agente ' + (raw.current_round * 7 % 30 + 1)]
-      const plats  = ['Twitter', 'Reddit']
-      eventLog.value.push({
-        round: raw.current_round,
-        platform: plats[raw.current_round % 2],
-        agent: agents[raw.current_round % 2],
-        acao: acoes[raw.current_round % acoes.length],
-        time: new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })
-      })
+      // Carregar ações reais da rodada
+      try {
+        const dRes = await service.get(`/api/simulation/${route.params.simulationId}/run-status/detail`)
+        const dRaw = dRes?.data?.data || dRes?.data || {}
+        const actions = dRaw?.all_actions || dRaw?.twitter_actions || []
+        realActions.value = actions
+
+        // Construir mapa de agentes reais
+        const agMap = {}
+        actions.forEach(a => {
+          const id = a.agent_id ?? a.agent_name
+          if (!agMap[id]) agMap[id] = { name: a.agent_name || `Agente ${a.agent_id}`, actions: 0, types: {} }
+          agMap[id].actions++
+          agMap[id].types[a.action_type] = (agMap[id].types[a.action_type] || 0) + 1
+        })
+        realAgentMap.value = agMap
+
+        // Gerar feed de eventos reais (últimos da rodada)
+        const roundActions = actions.filter(a => a.round_num === raw.current_round).slice(-3)
+        roundActions.forEach(a => {
+          const tipoLabel = {
+            'CREATE_POST': 'publicou um post',
+            'LIKE_POST': 'curtiu um post',
+            'REPOST': 'repostou conteúdo',
+            'FOLLOW': 'seguiu alguém',
+            'CREATE_COMMENT': 'comentou em um post',
+            'LIKE_COMMENT': 'curtiu um comentário',
+          }[a.action_type] || a.action_type
+          eventLog.value.push({
+            round: a.round_num,
+            platform: a.platform === 'twitter' ? 'Twitter' : 'Reddit',
+            agent: a.agent_name || `Agente ${a.agent_id}`,
+            acao: tipoLabel,
+            time: new Date().toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })
+          })
+        })
+      } catch { /* detail é opcional */ }
     }
 
     if ((s === 'completed' || s === 'finished') && !concluida.value) {
@@ -442,17 +548,23 @@ onUnmounted(() => { if (reportPollTimer.value) clearInterval(reportPollTimer.val
           <circle :cx="NET/2" :cy="NET/2" r="75" fill="none" stroke="rgba(255,255,255,0.03)"/>
           <line v-for="(e,i) in netEdges" :key="'e'+i"
             :x1="e.x1" :y1="e.y1" :x2="e.x2" :y2="e.y2"
-            stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
+            :stroke-width="e.w || 1" stroke="rgba(255,255,255,0.08)" stroke-linecap="round"/>
           <g v-for="(n,i) in agentNodes" :key="'n'+i">
             <circle :cx="n.x" :cy="n.y" :r="n.size+2" :fill="ROLE_COLORS[n.role]" opacity="0.12"/>
             <circle :cx="n.x" :cy="n.y" :r="n.size"
               :fill="n.active ? ROLE_COLORS[n.role] : 'rgba(255,255,255,0.15)'"
               :opacity="n.active ? 0.95 : 0.3"
               :class="{'np': n.active && !concluida}"/>
+            <text v-if="n.name" :x="n.x" :y="n.y + n.size + 8" text-anchor="middle"
+              fill="var(--text-muted)" font-size="4" font-weight="600" opacity="0.7">{{ n.name }}</text>
+          </g>
           </g>
         </svg>
         <div class="net-leg">
           <span v-for="(cor, r) in ROLE_COLORS" :key="r" :style="{color:cor}">● {{ r }}</span>
+        </div>
+        <div v-if="Object.keys(realAgentMap).length" class="net-info">
+          {{ Object.keys(realAgentMap).length }} agentes · {{ realActions.length }} interações
         </div>
 
         <div class="feed-sep"></div>
@@ -554,6 +666,7 @@ onUnmounted(() => { if (reportPollTimer.value) clearInterval(reportPollTimer.val
 .net-svg { width:100%;height:auto;display:block;max-height:150px; }
 .net-leg { display:flex;flex-wrap:wrap;gap:4px 8px; }
 .net-leg span { font-size:9px;font-weight:600;text-transform:capitalize; }
+.net-info { font-size:9px;color:var(--text-muted);margin-top:4px;text-align:center; }
 .np { animation:np 2.2s ease-in-out infinite; }
 @keyframes np { 0%,100%{opacity:1}50%{opacity:.45} }
 .feed-sep { height:1px;background:var(--border);margin:4px 0; }
