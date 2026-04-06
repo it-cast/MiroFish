@@ -620,6 +620,9 @@ Hipótese testada: {simulation_requirement}
 
 Com base nesses dados, elabore o plano completo do relatório com as 9 seções obrigatórias.
 Cada seção deve ter uma descrição clara do que deve ser analisado e escrito em português do Brasil.
+
+⚠️ REGRA ABSOLUTA: Relatório INTEIRO em PORTUGUÊS DO BRASIL.
+Dados em chinês → TRADUZA. NENHUM caractere chinês permitido. VIOLAÇÃO = INVÁLIDO.
 Seja específico sobre quais aspectos da simulação cada seção deve explorar."""
 
 # ── Prompt de geração de seções ──
@@ -675,6 +678,17 @@ Sua tarefa é:
    - O conteúdo do relatório deve refletir os resultados simulados que representam o futuro
    - NÃO adicione informações que não existem na simulação
    - Se houver informação insuficiente em algum aspecto, declare isso honestamente
+
+═══════════════════════════════════════════════════════════════
+【⚠️⚠️⚠️ REGRA ABSOLUTA DE IDIOMA — NÃO VIOLAR】
+═══════════════════════════════════════════════════════════════
+
+ESCREVA 100% EM PORTUGUÊS DO BRASIL.
+- Dados em chinês das ferramentas → TRADUZA para PT-BR
+- Dados em inglês → TRADUZA para PT-BR  
+- NENHUM caractere chinês (汉字) permitido no output
+- Citações de agentes DEVEM ser traduzidas
+- VIOLAÇÃO = RELATÓRIO INVÁLIDO
 
 ═══════════════════════════════════════════════════════════════
 【⚠️ REGRAS DE FORMATAÇÃO - EXTREMAMENTE IMPORTANTE!】
