@@ -266,7 +266,9 @@ onMounted(carregar)
               <span class="sim-data">{{ fmt(sim.created_at) }}</span>
             </div>
             <div class="sim-right">
-              <button v-if="sim.report_id" class="a-sec" @click="router.push(`/agentes/${sim.report_id}`)">💬</button>
+              <button v-if="(sim.runner_status||sim.status)==='completed'" class="a-sec" @click="router.push(`/simulacao/${sim.simulation_id}/agentes`)" title="Ver Agentes">🧠</button>
+              <button v-if="(sim.runner_status||sim.status)==='completed'" class="a-sec" @click="router.push(`/simulacao/${sim.simulation_id}/influentes`)" title="Ranking de Influência">👑</button>
+              <button v-if="sim.report_id" class="a-sec" @click="router.push(`/agentes/${sim.report_id}`)" title="Conversar com ReportAgent">💬</button>
               <button :class="['a-btn', acaoSim(sim).cls]" @click="acaoSim(sim).fn()">
                 {{ acaoSim(sim).label }}
               </button>
