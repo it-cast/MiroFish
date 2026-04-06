@@ -159,14 +159,14 @@ function initGraph() {
     .attr('orient', 'auto')
     .append('path')
     .attr('d', 'M0,-4L8,0L0,4')
-    .attr('fill', 'rgba(255,255,255,0.25)')
+    .attr('fill', 'rgba(0,0,0,0.2)')
 
   // Arestas
   const linkG = g.append('g').attr('class', 'links')
 
   const linkEl = linkG.selectAll('line')
     .data(es).enter().append('line')
-    .attr('stroke', 'rgba(255,255,255,0.12)')
+    .attr('stroke', 'rgba(0,0,0,0.1)')
     .attr('stroke-width', 1.2)
     .attr('marker-end', 'url(#arrow)')
 
@@ -176,7 +176,7 @@ function initGraph() {
     .attr('class', 'edge-label')
     .attr('text-anchor', 'middle')
     .attr('font-size', '9')
-    .attr('fill', 'rgba(255,255,255,0.3)')
+    .attr('fill', 'rgba(0,0,0,0.25)')
     .text(e => truncLabel(e.name || e.fact_type || '', 18))
 
   // Nós
@@ -213,7 +213,7 @@ function initGraph() {
     .attr('y', 22)
     .attr('text-anchor', 'middle')
     .attr('font-size', '10')
-    .attr('fill', 'rgba(255,255,255,0.75)')
+    .attr('fill', 'rgba(0,0,0,0.7)')
     .attr('font-weight', '500')
     .text(d => truncLabel(d.name || '', 14))
 
@@ -496,7 +496,7 @@ function truncar(s, n=120) { return s?.length > n ? s.slice(0, n) + '...' : (s |
 
 /* Canvas */
 .canvas-wrap { background:var(--bg-surface);border:1px solid var(--border);border-radius:14px;position:relative;overflow:hidden;min-height:520px; }
-.canvas-hint { position:absolute;top:10px;left:50%;transform:translateX(-50%);font-size:11px;color:rgba(255,255,255,0.2);background:var(--bg-overlay);border-radius:20px;padding:4px 12px;pointer-events:none;z-index:2;white-space:nowrap; }
+.canvas-hint { position:absolute;top:10px;left:50%;transform:translateX(-50%);font-size:11px;color:rgba(0,0,0,0.2);background:var(--bg-overlay);border-radius:20px;padding:4px 12px;pointer-events:none;z-index:2;white-space:nowrap; }
 .graph-svg { width:100%;height:100%;display:block;min-height:520px; }
 
 /* Zoom controls */
