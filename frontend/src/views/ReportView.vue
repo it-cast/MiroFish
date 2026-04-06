@@ -454,6 +454,16 @@ function abrirChat() {
 
     <div v-else-if="report" class="page">
 
+      <!-- Print-only header -->
+      <div class="print-header">
+        <div class="print-logo">AUGUR</div>
+        <div class="print-title">{{ titulo }}</div>
+        <div class="print-meta">
+          <span v-if="geradoEm">{{ geradoEm }}</span>
+          <span>Análise Preditiva — AUGUR by itcast</span>
+        </div>
+      </div>
+
       <!-- Breadcrumb -->
       <div class="page-head np">
         <div class="bc">
@@ -687,6 +697,13 @@ function abrirChat() {
         <div class="deep-content" v-if="deepSections[deepTab]">
           <div class="md-body" v-html="md(deepSections[deepTab].content || '')"></div>
         </div>
+        <!-- Print: show ALL sections (hidden on screen, visible in print) -->
+        <div class="deep-print-all">
+          <div v-for="(ds, i) in deepSections" :key="'print-'+i" class="deep-print-section">
+            <div class="deep-print-header">{{ ds.icon }} {{ ds.label }}</div>
+            <div class="md-body" v-html="md(ds.content || '')"></div>
+          </div>
+        </div>
       </div>
 
       <!-- ══════════ SEÇÕES GENÉRICAS (se houver) ══════════ -->
@@ -705,7 +722,7 @@ function abrirChat() {
       </div>
 
       <!-- ══════════ TOP AGENTES ══════════ -->
-      <div v-if="analytics && twTopAgents.length" class="bloco np">
+      <div v-if="analytics && twTopAgents.length" class="bloco">
         <div class="bloco-label">TOP AGENTES — ANÁLISE DE INFLUÊNCIA</div>
         <div class="agents-grid">
           <div v-for="(ag,i) in twTopAgents.slice(0,6)" :key="ag.user_id||i" class="agent-card">
@@ -921,25 +938,64 @@ function abrirChat() {
 /* ─── Doc footer ─────────────────────────────────────────────── */
 .doc-foot { display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);padding:12px 4px;border-top:1px solid var(--border); }
 
+/* ─── Print-only elements ─────────────────────────────────── */
+.print-header { display:none; }
+.deep-print-all { display:none; }
+.deep-print-section { margin-bottom:24px; }
+.deep-print-header { font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:12px;padding-bottom:6px;border-bottom:2px solid var(--accent2); }
+
 /* ─── PRINT ─────────────────────────────────────────────────── */
 @media print {
   * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
   .np { display:none !important; }
-  @page { size:A4; margin:15mm; }
-  .page { gap:14px; }
+  @page { size:A4; margin:12mm 15mm; }
+  .page { gap:10px; }
+
+  /* Show print header */
+  .print-header { display:block !important;text-align:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #7c6ff7; }
+  .print-logo { font-size:28px;font-weight:900;color:#7c6ff7;letter-spacing:4px; }
+  .print-title { font-size:16px;font-weight:700;color:#1a1a2e;margin-top:6px; }
+  .print-meta { font-size:10px;color:#6b6b80;margin-top:4px;display:flex;justify-content:center;gap:16px; }
+
+  /* Page breaks */
   .bloco { page-break-inside:avoid;break-inside:avoid; }
+  .deep-bloco { page-break-inside:auto; }
+  .deep-print-section { page-break-inside:avoid;break-inside:avoid; }
+  .risk-card,.rec-card { page-break-inside:avoid; }
+
+  /* Layout fixes */
   .bloco-2col { grid-template-columns:1fr 1fr; }
   .cen-grid { grid-template-columns:repeat(3,1fr); }
   .resumo-inner { grid-template-columns:auto 1fr auto; }
   .agents-grid { grid-template-columns:repeat(3,1fr); }
-  .sec-body-inner,.deep-content { display:block !important; }
+  .insights-grid,.pred-grid { grid-template-columns:repeat(2,1fr); }
+  .sec-body-inner { display:block !important; }
   .doc-foot { display:flex !important; }
-  .bloco,.kpi-card,.chart-bloco,.cen-card,.agent-card,.prob-section,.risk-card,.rec-card,.insight-card,.pred-card { background:#fff !important;border-color:#e0e0ee !important; }
+
+  /* Deep analysis: hide tabs, show ALL content */
+  .deep-tabs { display:none !important; }
+  .deep-content { display:none !important; }
+  .deep-print-all { display:block !important; }
+  .deep-print-header { color:#7c6ff7 !important;border-color:#7c6ff7 !important; }
+
+  /* White background for ALL cards */
+  .bloco,.kpi-card,.chart-bloco,.cen-card,.agent-card,.prob-section,
+  .risk-card,.rec-card,.insight-card,.pred-card,.cta-bar,.deep-bloco { background:#fff !important;border-color:#e0e0ee !important; }
+
+  /* Text colors for readability */
   .md-body,.md-body :deep(*) { color:#2a2a3e !important; }
-  .sec-nom,.cb-val,.kpi-valor,.cen-nome,.risk-name,.rec-name { color:#1a1a2e !important; }
-  .bloco-label,.bloco-label-sm,.sec-num,.cb-label,.kpi-label,.prob-title { color:#6b6b80 !important; }
+  .sec-nom,.cb-val,.kpi-valor,.cen-nome,.risk-name,.rec-name,.cta-title,.deep-print-header { color:#1a1a2e !important; }
+  .bloco-label,.bloco-label-sm,.sec-num,.cb-label,.kpi-label,.prob-title,
+  .risk-prob-label,.rec-prazo,.tl-prob,.tl-date { color:#6b6b80 !important; }
+  .cen-desc,.risk-desc,.rec-desc,.insight-text,.pred-text,.tl-desc,.ag-bio,.cta-sub { color:#3a3a4e !important; }
   .doc-foot { color:#9898b0 !important;border-color:#e0e0ee !important; }
   .page-head { display:none !important; }
+
+  /* Timeline fix for print */
+  .timeline { border-left-color:#ccc !important; }
+  .tl-dot { border-color:#7c6ff7 !important;background:#fff !important; }
+  .tl-bar { background:#eee !important; }
+  .tl-bar-fill { background:#7c6ff7 !important; }
 }
 
 /* ─── Responsive ─────────────────────────────────────────────── */
