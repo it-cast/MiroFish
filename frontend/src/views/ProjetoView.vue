@@ -213,6 +213,7 @@ onMounted(carregar)
         <div class="proj-actions">
           <button class="btn-nova" @click="abrirModal">+ Nova Simulação</button>
           <button class="btn-grafo" @click="router.push(`/projeto/${pid}/grafo`)" title="Ver Grafo de Conhecimento">🕸 Grafo</button>
+          <button class="btn-grafo" @click="router.push('/comparar')" title="Comparar Simulações">📊 Comparar</button>
           <button class="btn-del" @click="confirmDelete = true" title="Excluir">🗑</button>
         </div>
       </div>
