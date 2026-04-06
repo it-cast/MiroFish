@@ -667,6 +667,10 @@ function abrirChat() {
   <AppShell :title="titulo">
     <template #actions>
       <AugurButton variant="ghost" @click="voltar" class="np">← Projeto</AugurButton>
+      <AugurButton variant="ghost" @click="router.push(`/simulacao/${report?.simulation_id}/agentes`)" class="np" v-if="report?.simulation_id">🧠 Agentes</AugurButton>
+      <AugurButton variant="ghost" @click="router.push(`/simulacao/${report?.simulation_id}/posts`)" class="np" v-if="report?.simulation_id">📝 Posts</AugurButton>
+      <AugurButton variant="ghost" @click="router.push(`/simulacao/${report?.simulation_id}/influentes`)" class="np" v-if="report?.simulation_id">👑 Influentes</AugurButton>
+      <AugurButton variant="ghost" @click="router.push('/comparar')" class="np">📊 Comparar</AugurButton>
       <AugurButton @click="exportarPDF" :disabled="gerandoPDF" class="np">
         <span v-if="gerandoPDF">⏳ Gerando PDF...</span>
         <span v-else>⬇ Exportar PDF</span>
