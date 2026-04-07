@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '../components/layout/AppShell.vue'
 import AugurButton from '../components/ui/AugurButton.vue'
@@ -13,14 +13,45 @@ const posts      = ref([])
 const carregando = ref(true)
 const erro       = ref('')
 const deepTab    = ref(0)
+let reportPollTimer = null
+
+function hasReportContent(raw) {
+  const sections = raw?.outline?.sections || []
+  const hasSectionBody = sections.some(s => (s?.content || '').trim().length > 0)
+  return hasSectionBody
+}
+
+async function carregarRelatorio() {
+  const rRes = await service.get(`/api/report/${route.params.reportId}`).catch(e => ({ error: e }))
+  if (rRes.error) throw rRes.error
+  const raw = rRes?.data?.data || rRes?.data || rRes
+  report.value = raw
+  return raw
+}
+
+function iniciarPollingSeNecessario(raw) {
+  const status = raw?.status
+  const precisaPolling = ['pending', 'planning', 'generating'].includes(status) || !hasReportContent(raw)
+  if (!precisaPolling) return
+  if (reportPollTimer) clearInterval(reportPollTimer)
+  reportPollTimer = setInterval(async () => {
+    try {
+      const atualizado = await carregarRelatorio()
+      if (atualizado?.status === 'completed' && hasReportContent(atualizado)) {
+        clearInterval(reportPollTimer)
+        reportPollTimer = null
+      }
+    } catch {
+      // Polling silencioso; não bloquear UI
+    }
+  }, 3000)
+}
 
 onMounted(async () => {
   carregando.value = true
   try {
-    const rRes = await service.get(`/api/report/${route.params.reportId}`).catch(e => ({ error: e }))
-    if (rRes.error) throw rRes.error
-    const raw = rRes?.data?.data || rRes?.data || rRes
-    report.value = raw
+    const raw = await carregarRelatorio()
+    iniciarPollingSeNecessario(raw)
     if (raw?.simulation_id) {
       try {
         const aRes = await service.get(`/api/analytics/${raw.simulation_id}`)
@@ -39,6 +70,13 @@ onMounted(async () => {
     erro.value = e?.response?.data?.error || e?.message || 'Erro ao carregar relatório.'
   } finally {
     carregando.value = false
+  }
+})
+
+onUnmounted(() => {
+  if (reportPollTimer) {
+    clearInterval(reportPollTimer)
+    reportPollTimer = null
   }
 })
 
@@ -552,121 +590,67 @@ const gerandoPDF = ref(false)
 const pageRef = ref(null)
 
 async function exportarPDF() {
-  // Tentar print nativo primeiro (melhor qualidade)
-  if (confirm('Usar impressão nativa do navegador? (Recomendado)\n\nDica: Escolha "Salvar como PDF" no diálogo.')) {
-    window.print()
-    return
-  }
-  // Fallback: html2pdf.js
+  if (gerandoPDF.value) return
   gerandoPDF.value = true
-  
   try {
-    // Carregar html2pdf.js do CDN
-    if (!window.html2pdf) {
-      await new Promise((resolve, reject) => {
-        const s = document.createElement('script')
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'
-        s.onload = resolve
-        s.onerror = reject
-        document.head.appendChild(s)
-      })
-    }
-    
-    // Expandir TODA a analise profunda antes de capturar
-    const prevTab = deepTab.value
     const el = pageRef.value
-    if (!el) return
-    
-    // Criar clone para nao alterar a tela
+    if (!el) {
+      window.print()
+      return
+    }
+
     const clone = el.cloneNode(true)
-    
-    // No clone: mostrar TODAS as deep sections, esconder tabs
-    clone.querySelectorAll('.deep-tabs').forEach(t => t.style.display = 'none')
-    clone.querySelectorAll('.deep-content').forEach(c => c.style.display = 'none')
-    clone.querySelectorAll('.deep-print-all').forEach(p => p.style.display = 'block')
-    // Expandir accordions
-    clone.querySelectorAll('.sec-body-inner').forEach(s => s.style.display = 'block')
-    // Esconder botoes e CTA
-    clone.querySelectorAll('.np').forEach(n => n.style.display = 'none')
-    // Mostrar print-header
-    const ph = clone.querySelector('.print-header')
-    if (ph) ph.style.display = 'block'
-    
-    // PDF: tema já é claro, só garantir fundo branco puro e remover transparências
-    clone.style.cssText += ';background:#fff!important;padding:20px;'
-    clone.querySelectorAll('.bloco, .kpi-card, .chart-bloco, .cen-card, .risk-card, .rec-card, .insight-card, .pred-card, .sent-card, .post-card, .achado-card').forEach(b => {
-      b.style.background = '#ffffff'
-      b.style.boxShadow = 'none'
-      b.style.border = '1px solid #e0e0e8'
-    })
-    // SVG text: garantir que var(--text-*) resolve para escuro
-    clone.querySelectorAll('svg text').forEach(t => {
-      const f = t.getAttribute('fill') || ''
-      if (f.includes('var(--text')) t.setAttribute('fill', '#1a1a2e')
-    })
-    clone.querySelectorAll('.bloco, .kpi-card, .chart-bloco, .cen-card, .risk-card, .rec-card, .insight-card, .pred-card, .sent-card, .post-card, .achado-card').forEach(b => {
-      b.style.background = '#ffffff'
-      b.style.borderColor = '#e0e0ee'
-      b.style.color = '#2a2a3e'
-    })
-    clone.querySelectorAll('.bloco-label, .bloco-label-sm, .kpi-label, .prob-title').forEach(l => {
-      l.style.color = '#6b6b80'
-    })
-    clone.querySelectorAll('.md-body, .cen-desc, .risk-desc, .rec-desc, .insight-text, .pred-text, .tl-desc, .post-content, .sent-label').forEach(t => {
-      t.style.color = '#3a3a4e'
-    })
-    clone.querySelectorAll('.sec-nom, .cb-val, .kpi-valor, .cen-nome, .risk-name, .rec-name').forEach(t => {
-      t.style.color = '#1a1a2e'
-    })
-    clone.querySelectorAll('.deep-print-header').forEach(h => {
-      h.style.color = '#7c6ff7'
-      h.style.borderBottom = '2px solid #7c6ff7'
-      h.style.paddingBottom = '6px'
-      h.style.marginBottom = '12px'
-      h.style.fontSize = '16px'
-      h.style.fontWeight = '700'
-    })
-    // Timeline fix
-    clone.querySelectorAll('.timeline').forEach(t => t.style.borderLeftColor = '#ccc')
-    clone.querySelectorAll('.tl-dot').forEach(d => { d.style.borderColor = '#7c6ff7'; d.style.background = '#fff' })
-    
-    // Montar temporariamente no DOM (invisivel)
-    const wrapper = document.createElement('div')
-    wrapper.style.position = 'fixed'
-    wrapper.style.left = '-9999px'
-    wrapper.style.top = '0'
-    wrapper.style.width = '210mm'
-    wrapper.appendChild(clone)
-    document.body.appendChild(wrapper)
-    
-    const nomeArquivo = (titulo.value || 'Relatorio-AUGUR')
-      .replace(/[^a-zA-Z0-9À-ú\s-]/g, '')
-      .replace(/\s+/g, '_')
-      .slice(0, 60)
-    
-    await window.html2pdf()
-      .set({
-        margin: [10, 12, 10, 12],
-        filename: `${nomeArquivo}.pdf`,
-        image: { type: 'jpeg', quality: 0.95 },
-        html2canvas: { 
-          scale: 2, 
-          useCORS: true, 
-          letterRendering: true,
-          scrollY: 0,
-          windowWidth: 800
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-      })
-      .from(clone)
-      .save()
-    
-    document.body.removeChild(wrapper)
-    
-  } catch (e) {
-    console.error('Erro ao gerar PDF:', e)
-    alert('Erro ao gerar PDF. Tente novamente.')
+    clone.querySelectorAll('.np,.cta-bar,.page-head').forEach(n => n.remove())
+    clone.querySelectorAll('.deep-tabs,.deep-content').forEach(n => (n.style.display = 'none'))
+    clone.querySelectorAll('.deep-print-all').forEach(n => (n.style.display = 'block'))
+    clone.querySelectorAll('.sec-body-inner').forEach(n => (n.style.display = 'block'))
+
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      alert('Não foi possível abrir a janela de impressão. Verifique o bloqueador de pop-up.')
+      return
+    }
+
+    const css = `
+      <style>
+        @page { size: A4; margin: 12mm; }
+        * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        body { margin: 0; background: #fff; color: #1f2430; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 11pt; }
+        .page { padding: 0; display: flex; flex-direction: column; gap: 10px; }
+        .bloco,.kpi-card,.chart-bloco,.cen-card,.risk-card,.rec-card,.insight-card,.pred-card,.sent-card,.post-card,.achado-card,.agent-card {
+          background: #fff !important; border: 1px solid #e4e6eb !important; break-inside: avoid; page-break-inside: avoid;
+        }
+        .bloco { border-radius: 10px; padding: 14px 16px; }
+        .bloco-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .cen-grid,.agents-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        .insights-grid,.pred-grid,.posts-grid,.sentiment-grid { grid-template-columns: 1fr 1fr !important; }
+        .resumo-inner { grid-template-columns: auto 1fr !important; gap: 14px; }
+        .resumo-badges { flex-direction: row !important; flex-wrap: wrap !important; }
+        .doc-foot { border-top: 1px solid #e4e6eb; color: #69707d; padding-top: 8px; }
+        .md-body, .md-body * { color: #252b37 !important; }
+        .bloco-label,.bloco-label-sm,.cb-label,.kpi-label,.prob-title { color: #69707d !important; }
+      </style>
+    `
+
+    printWindow.document.open()
+    printWindow.document.write(`
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>${(titulo.value || 'Relatório AUGUR').replace(/</g, '&lt;')}</title>
+          ${css}
+        </head>
+        <body></body>
+      </html>
+    `)
+    printWindow.document.close()
+    printWindow.document.body.appendChild(clone)
+
+    setTimeout(() => {
+      printWindow.focus()
+      printWindow.print()
+      printWindow.close()
+    }, 250)
   } finally {
     gerandoPDF.value = false
   }
