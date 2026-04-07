@@ -21,6 +21,27 @@ const status = ref({
 })
 
 const concluida        = ref(false)
+const showCusto        = ref(false)
+
+// Custo estimado da operação
+const custoEstimado = computed(() => {
+  const agentes = Object.keys(realAgentMap.value).length || status.value.total_agents || 20
+  const rodadas = status.value.total_rounds || 12
+  const episodios = Math.round(agentes * 8.65) // ~8.65 episódios por agente no Zep
+  const zepUSD = episodios * 0.00625 // $25 / 4000 episódios
+  const zepBRL = zepUSD * 5.5
+  const openaiCalls = agentes + 10 // perfis + config + report
+  const openaiBRL = openaiCalls * 0.03 // ~R$0.03 por call GPT-4o-mini
+  const total = zepBRL + openaiBRL
+  return {
+    episodios,
+    zepBRL: zepBRL.toFixed(2),
+    openaiBRL: openaiBRL.toFixed(2),
+    total: total.toFixed(2),
+    agentes,
+    rodadas
+  }
+})
 const parada           = ref(false)
 const erroExec         = ref('')
 const parando          = ref(false)
@@ -627,6 +648,20 @@ onUnmounted(() => { if (reportPollTimer.value) clearInterval(reportPollTimer.val
       </div>
     </Transition>
 
+    <!-- Cost toggle -->
+    <button class="cost-toggle" @click="showCusto = !showCusto" title="Custo da operação">💰</button>
+    <Transition name="fade">
+      <div v-if="showCusto" class="cost-panel">
+        <h4>💰 Custo Estimado</h4>
+        <div class="cp-row"><span>Agentes</span><span>{{ custoEstimado.agentes }}</span></div>
+        <div class="cp-row"><span>Rodadas</span><span>{{ custoEstimado.rodadas }}</span></div>
+        <div class="cp-row"><span>Episódios Zep</span><span>{{ custoEstimado.episodios }}</span></div>
+        <div class="cp-row"><span>Zep Cloud</span><span>R$ {{ custoEstimado.zepBRL }}</span></div>
+        <div class="cp-row"><span>OpenAI</span><span>R$ {{ custoEstimado.openaiBRL }}</span></div>
+        <div class="cp-row cp-total"><span>TOTAL</span><span>R$ {{ custoEstimado.total }}</span></div>
+        <div class="cp-note">Estimativa baseada em ~8,65 episódios/agente (Zep $25/4k) + ~R$0,03/call OpenAI</div>
+      </div>
+    </Transition>
   </AppShell>
 </template>
 
@@ -679,6 +714,17 @@ onUnmounted(() => { if (reportPollTimer.value) clearInterval(reportPollTimer.val
 .prog-f { height:100%;border-radius:3px;transition:width .6s ease; }
 .pf-run { background:linear-gradient(90deg,#00b89c,#00e5c3);animation:shim 2s infinite; }
 .pf-done { background:var(--accent); }
+/* Cost panel */
+.cost-toggle { position:fixed;bottom:20px;right:20px;background:var(--accent2);color:#fff;border:none;width:42px;height:42px;border-radius:50%;font-size:18px;cursor:pointer;z-index:50;box-shadow:var(--shadow-md);transition:transform .15s; }
+.cost-toggle:hover { transform:scale(1.1); }
+.cost-panel { position:fixed;bottom:72px;right:20px;background:var(--bg-surface);border:1px solid var(--border);border-radius:14px;padding:16px;width:260px;z-index:50;box-shadow:var(--shadow-lg); }
+.cost-panel h4 { font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px; }
+.cp-row { display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:var(--text-secondary); }
+.cp-row span:last-child { font-weight:700;font-family:monospace;color:var(--text-primary); }
+.cp-total { border-top:1px solid var(--border);margin-top:6px;padding-top:8px;font-weight:700;font-size:13px;color:var(--accent2); }
+.cp-note { font-size:10px;color:var(--text-muted);margin-top:8px;line-height:1.4; }
+
+.fade-enter-active,.fade-leave-active{transition:opacity .2s}.fade-enter-from,.fade-leave-to{opacity:0}
 @keyframes shim { 0%,100%{opacity:1}50%{opacity:.7} }
 .prog-p { font-size:12px;color:var(--text-muted);font-family:monospace;min-width:30px;text-align:right; }
 .round-st { font-size:12px; }
