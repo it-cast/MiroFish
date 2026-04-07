@@ -679,6 +679,13 @@ Sua tarefa é:
    - NÃO adicione informações que não existem na simulação
    - Se houver informação insuficiente em algum aspecto, declare isso honestamente
 
+5. 【Direto para decisão - EVITAR DENSIDADE EXCESSIVA】
+   - Escreva de forma OBJETIVA, com frases curtas e linguagem executiva
+   - Evite blocos longos: no máximo 6 parágrafos curtos por seção
+   - Inclua no início um bloco "**Orientação objetiva**" com 3-5 bullets acionáveis
+   - Cada bullet deve indicar: ação recomendada, impacto esperado e prazo sugerido
+   - Priorize clareza para tomada de decisão, não texto acadêmico
+
 ═══════════════════════════════════════════════════════════════
 【⚠️⚠️⚠️ REGRA ABSOLUTA DE IDIOMA — NÃO VIOLAR】
 ═══════════════════════════════════════════════════════════════
@@ -1314,8 +1321,23 @@ class ReportAgent:
                 outline.title = "Relatório de Previsão Futura"
             if self._has_chinese(outline.summary):
                 outline.summary = "Análise preditiva baseada em simulação multiagente"
+
+        # Garantia final: remover caracteres chineses residuais
+        outline.title = self._strip_remaining_chinese(outline.title)
+        outline.summary = self._strip_remaining_chinese(outline.summary)
+        for s in outline.sections:
+            s.title = self._strip_remaining_chinese(s.title)
         
         return outline
+
+    @staticmethod
+    def _strip_remaining_chinese(text: str) -> str:
+        """Remove caracteres chineses residuais após tentativas de tradução."""
+        if not text:
+            return text
+        cleaned = re.sub(r'[\u4e00-\u9fff]+', '', text)
+        cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+        return cleaned.strip()
 
     def _generate_section_react(
         self, 
@@ -1779,6 +1801,12 @@ class ReportAgent:
                             logger.info(f"Seção '{section.title}' traduzida com sucesso")
                     except Exception as te:
                         logger.error(f"Falha ao traduzir seção: {te}")
+                
+                # Garantia final: nunca persistir caracteres chineses no output final
+                if section_content and self._has_chinese(section_content):
+                    logger.warning(f"Ainda há chinês na seção '{section.title}' após tradução. Limpando caracteres residuais.")
+                    section_content = self._strip_remaining_chinese(section_content)
+                    section.content = section_content
                 
                 generated_sections.append(f"## {section.title}\n\n{section_content}")
 
