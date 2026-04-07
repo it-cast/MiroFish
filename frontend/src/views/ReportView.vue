@@ -18,7 +18,8 @@ let reportPollTimer = null
 function hasReportContent(raw) {
   const sections = raw?.outline?.sections || []
   const hasSectionBody = sections.some(s => (s?.content || '').trim().length > 0)
-  return hasSectionBody
+  const hasSummary = (raw?.outline?.summary || '').trim().length > 0
+  return hasSectionBody || hasSummary
 }
 
 async function carregarRelatorio() {
