@@ -60,10 +60,12 @@ def create_app(config_class=Config):
         return response
     
     from .api import graph_bp, simulation_bp, report_bp, analytics_bp
+    from .api.public import public_bp
     app.register_blueprint(graph_bp, url_prefix='/api/graph')
     app.register_blueprint(simulation_bp, url_prefix='/api/simulation')
     app.register_blueprint(report_bp, url_prefix='/api/report')
     app.register_blueprint(analytics_bp, url_prefix='/api/analytics')
+    app.register_blueprint(public_bp, url_prefix='/api/public')
     
     @app.route('/health')
     def health():
