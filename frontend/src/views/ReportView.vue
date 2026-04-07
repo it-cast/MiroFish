@@ -55,17 +55,18 @@ const geradoEm = computed(() => {
 // ─── Categorizar seções por tipo ──────────────────────────────
 function categ(title) {
   const t = (title || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-  if (t.includes('resumo')) return 'resumo'
-  if (t.includes('cenario')) return 'cenarios'
-  if (t.includes('risco')) return 'riscos'
-  if (t.includes('recomend')) return 'recomendacoes'
-  if (t.includes('previs')) return 'previsoes'
-  if (t.includes('insight')) return 'insights'
-  if (t.includes('mapa') && t.includes('forca')) return 'deep_mapa'
-  if (t.includes('cronolog')) return 'deep_crono'
-  if (t.includes('padro')) return 'deep_padroes'
-  if (t.includes('hipotes')) return 'deep_hipoteses'
-  if (t.includes('anomal')) return 'deep_anomalias'
+  // PT-BR
+  if (t.includes('resumo') || t.includes('executive') || t.includes('摘要') || t.includes('总结') || t.includes('执行')) return 'resumo'
+  if (t.includes('cenario') || t.includes('scenario') || t.includes('场景') || t.includes('情景')) return 'cenarios'
+  if (t.includes('risco') || t.includes('risk') || t.includes('风险') || t.includes('挑战')) return 'riscos'
+  if (t.includes('recomend') || t.includes('recommend') || t.includes('建议') || t.includes('策略')) return 'recomendacoes'
+  if (t.includes('previs') || t.includes('predict') || t.includes('forecast') || t.includes('预测') || t.includes('趋势')) return 'previsoes'
+  if (t.includes('insight') || t.includes('发现') || t.includes('洞察')) return 'insights'
+  if ((t.includes('mapa') && t.includes('forca')) || t.includes('market') || t.includes('竞争') || t.includes('格局') || t.includes('演变')) return 'deep_mapa'
+  if (t.includes('cronolog') || t.includes('chronol') || t.includes('时间')) return 'deep_crono'
+  if (t.includes('padro') || t.includes('pattern') || t.includes('消费') || t.includes('行为') || t.includes('转变')) return 'deep_padroes'
+  if (t.includes('hipotes') || t.includes('hypothes') || t.includes('品牌') || t.includes('叙事') || t.includes('机会')) return 'deep_hipoteses'
+  if (t.includes('anomal') || t.includes('未来') || t.includes('潜在')) return 'deep_anomalias'
   if (t.includes('timeline') || t.includes('linha do tempo')) return 'timeline'
   return 'generic'
 }
@@ -73,9 +74,9 @@ function categ(title) {
 // Seções organizadas por categoria
 const secResumo = computed(() => secoes.value.find(s => categ(s.title) === 'resumo') || secoes.value[0])
 const secCenarios = computed(() => secoes.value.find(s => categ(s.title) === 'cenarios') || secoes.value[1])
-const secRiscos = computed(() => secoes.value.find(s => categ(s.title) === 'riscos'))
-const secRecomendacoes = computed(() => secoes.value.find(s => categ(s.title) === 'recomendacoes'))
-const secPrevisoes = computed(() => secoes.value.find(s => categ(s.title) === 'previsoes'))
+const secRiscos = computed(() => secoes.value.find(s => categ(s.title) === 'riscos') || secoes.value.find(s => categ(s.title) === 'deep_anomalias'))
+const secRecomendacoes = computed(() => secoes.value.find(s => categ(s.title) === 'recomendacoes') || secoes.value.find(s => categ(s.title) === 'previsoes'))
+const secPrevisoes = computed(() => secoes.value.find(s => categ(s.title) === 'previsoes') || secoes.value.find(s => categ(s.title) === 'recomendacoes'))
 const secInsights = computed(() => secoes.value.find(s => categ(s.title) === 'insights'))
 
 const deepSections = computed(() => {
@@ -551,6 +552,12 @@ const gerandoPDF = ref(false)
 const pageRef = ref(null)
 
 async function exportarPDF() {
+  // Tentar print nativo primeiro (melhor qualidade)
+  if (confirm('Usar impressão nativa do navegador? (Recomendado)\n\nDica: Escolha "Salvar como PDF" no diálogo.')) {
+    window.print()
+    return
+  }
+  // Fallback: html2pdf.js
   gerandoPDF.value = true
   
   try {
@@ -1450,5 +1457,17 @@ function abrirChat() {
   .kpi-row { grid-template-columns:repeat(2,1fr); }
   .resumo-inner { grid-template-columns:1fr; }
   .gauge-wrap { width:100%;align-items:center; }
+}
+
+/* Print styles */
+@media print {
+  .app-shell { display:block !important; }
+  .sidebar, .topbar, .breadcrumbs, .np, .cta-bar { display:none !important; }
+  .app-main { margin:0 !important; }
+  .app-content { height:auto !important; overflow:visible !important; padding:10px !important; }
+  .bloco { break-inside:avoid; page-break-inside:avoid; border:1px solid #ddd !important; margin-bottom:12px !important; }
+  body { background:#fff !important; color:#000 !important; font-size:11pt !important; }
+  .bloco-label { color:#333 !important; }
+  .md-body { color:#222 !important; }
 }
 </style>
