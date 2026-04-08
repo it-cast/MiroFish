@@ -713,6 +713,14 @@ function abrirChat() {
   const rid = route.params.reportId
   router.push(`/agentes/${rid}`)
 }
+
+// ─── Export PDF ───────────────────────────────────────────────
+function exportarPDF() {
+  const reportId = route.params.reportId
+  // Backend gera Markdown — abrir em nova aba para download
+  const downloadUrl = (import.meta.env.VITE_API_BASE_URL || '') + '/api/report/' + reportId + '/download'
+  window.open(downloadUrl, '_blank')
+}
 </script>
 
 
@@ -751,7 +759,7 @@ function abrirChat() {
           <AugurButton variant="ghost" @click="router.push(`/simulacao/${report?.simulation_id}/agentes`)" class="tb-btn" v-if="report?.simulation_id">🧠 Agentes</AugurButton>
           <AugurButton variant="ghost" @click="router.push(`/simulacao/${report?.simulation_id}/posts`)" class="tb-btn" v-if="report?.simulation_id">📝 Posts</AugurButton>
           <AugurButton variant="ghost" @click="router.push(`/simulacao/${report?.simulation_id}/influentes`)" class="tb-btn" v-if="report?.simulation_id">👑 Influentes</AugurButton>
-          <AugurButton variant="primary" @click="window.print()" class="tb-btn">📄 Exportar PDF</AugurButton>
+          <AugurButton variant="primary" @click="exportarPDF()" class="tb-btn">📄 Exportar PDF</AugurButton>
         </div>
       </header>
 
