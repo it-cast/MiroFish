@@ -30,6 +30,22 @@ const simulationId = ref(null)
 const abortado    = ref(false)
 let pollTimer     = null
 
+// ─── Seleção de Agentes ───────────────────────────────────────
+const entityTypes = ref([])          // Tipos de entidade do ontology
+const selectedTypes = ref([])        // Tipos selecionados pelo usuário
+const customAgents = ref([])         // Agentes customizados adicionados
+const showAgentSelection = ref(false)
+const novoAgente = ref('')           // Input para adicionar agente custom
+
+const REGULADORES_BR = [
+  { name: 'PROCON', desc: 'Órgão de defesa do consumidor' },
+  { name: 'ANVISA', desc: 'Agência de vigilância sanitária' },
+  { name: 'BACEN', desc: 'Banco Central do Brasil' },
+  { name: 'INMETRO', desc: 'Instituto de metrologia' },
+  { name: 'IBAMA', desc: 'Instituto do meio ambiente' },
+  { name: 'CADE', desc: 'Conselho administrativo de defesa econômica' },
+]
+
 const maxRounds = computed(() => cfgRodadas.value)
 const maxAgents = computed(() => cfgAgentes.value)
 
@@ -49,10 +65,11 @@ const estMin   = computed(() => Math.round(Math.max(2, cfgAgentes.value * cfgRod
 const estCusto = computed(() => (cfgAgentes.value * cfgRodadas.value * 0.0008).toFixed(2))
 
 const fases = [
-  { key: 'building_graph', label: 'Construindo Grafo',  desc: 'Analisando documentos e criando rede de conhecimento' },
-  { key: 'creating_sim',   label: 'Criando Simulação',  desc: 'Configurando o ambiente de simulação' },
-  { key: 'preparing',      label: 'Gerando Agentes',    desc: 'Criando perfis únicos para cada agente com IA' },
-  { key: 'starting',       label: 'Iniciando',          desc: 'Lançando a simulação multiagente' },
+  { key: 'building_graph',    label: 'Construindo Grafo',    desc: 'Analisando documentos e criando rede de conhecimento' },
+  { key: 'creating_sim',      label: 'Criando Simulação',    desc: 'Configurando o ambiente de simulação' },
+  { key: 'selecting_agents',  label: 'Seleção de Agentes',   desc: 'Escolha quais tipos de agentes participam da simulação' },
+  { key: 'preparing',         label: 'Gerando Agentes',      desc: 'Criando perfis únicos para cada agente com IA' },
+  { key: 'starting',          label: 'Iniciando',            desc: 'Lançando a simulação multiagente' },
 ]
 
 const faseAtual  = computed(() => fases.findIndex(f => f.key === phase.value))
@@ -324,9 +341,48 @@ async function createSimulation(pid, graphId) {
   const res = await service.post('/api/simulation/create', { project_id: pid, graph_id: graphId })
   return res.data?.data || res.data || res
 }
-async function prepareSimulation(simId) {
-  const res = await service.post('/api/simulation/prepare', { simulation_id: simId })
+async function prepareSimulation(simId, entityTypesFilter = null) {
+  const payload = { simulation_id: simId }
+  if (entityTypesFilter && entityTypesFilter.length > 0) {
+    payload.entity_types = entityTypesFilter
+  }
+  const res = await service.post('/api/simulation/prepare', payload)
   return res.data?.data || res.data || res
+}
+
+function confirmarAgentes() {
+  // Coletar tipos selecionados + custom
+  const types = entityTypes.value
+    .filter(et => et.selected)
+    .map(et => et.name)
+  const customs = customAgents.value.map(a => a.name)
+  selectedTypes.value = [...types, ...customs]
+  
+  if (window._resolveAgentSelection) {
+    window._resolveAgentSelection()
+    window._resolveAgentSelection = null
+  }
+}
+
+function toggleEntityType(et) {
+  et.selected = !et.selected
+}
+
+function adicionarAgente() {
+  const nome = novoAgente.value.trim()
+  if (!nome) return
+  if (customAgents.value.some(a => a.name === nome)) return
+  customAgents.value.push({ name: nome, desc: 'Agente customizado', custom: true })
+  novoAgente.value = ''
+}
+
+function adicionarRegulador(reg) {
+  if (customAgents.value.some(a => a.name === reg.name)) return
+  customAgents.value.push({ ...reg, custom: true })
+}
+
+function removerCustom(idx) {
+  customAgents.value.splice(idx, 1)
 }
 async function startSimulation(simId) {
   const res = await service.post('/api/simulation/start', {
@@ -459,6 +515,66 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
         >
           ✕ Cancelar simulação
         </button>
+      </div>
+
+      <!-- ═══ SELEÇÃO DE AGENTES ═══ -->
+      <div v-if="showAgentSelection" class="agent-select-panel">
+        <div class="asp-header">
+          <h3>🎭 Selecione os Tipos de Agentes</h3>
+          <p>Escolha quais tipos de agentes participarão da simulação. O sistema criará agentes com perfis únicos para cada tipo selecionado.</p>
+        </div>
+        
+        <div class="asp-grid">
+          <div v-for="et in entityTypes" :key="et.name" 
+               class="asp-card" :class="{ 'asp-selected': et.selected }"
+               @click="toggleEntityType(et)">
+            <div class="asp-check">{{ et.selected ? '✅' : '⬜' }}</div>
+            <div class="asp-info">
+              <div class="asp-name">{{ et.name }}</div>
+              <div class="asp-desc">{{ et.description }}</div>
+              <div class="asp-examples" v-if="et.examples?.length">
+                Ex: {{ et.examples.slice(0, 2).join(', ') }}
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Reguladores brasileiros -->
+        <div class="asp-section">
+          <h4>🏛 Adicionar Reguladores Brasileiros</h4>
+          <div class="asp-regs">
+            <button v-for="reg in REGULADORES_BR" :key="reg.name" 
+                    class="asp-reg-btn"
+                    :class="{ 'asp-reg-added': customAgents.some(a => a.name === reg.name) }"
+                    @click="adicionarRegulador(reg)">
+              {{ reg.name }}
+            </button>
+          </div>
+        </div>
+        
+        <!-- Custom agent -->
+        <div class="asp-section">
+          <h4>➕ Adicionar Agente Personalizado</h4>
+          <div class="asp-custom-row">
+            <input v-model="novoAgente" placeholder="Nome do agente (ex: Influenciador Tech)" 
+                   class="asp-input" @keyup.enter="adicionarAgente()"/>
+            <button class="asp-add-btn" @click="adicionarAgente()">Adicionar</button>
+          </div>
+          <div v-if="customAgents.length" class="asp-custom-list">
+            <span v-for="(a, i) in customAgents" :key="i" class="asp-custom-tag">
+              {{ a.name }} <span class="asp-remove" @click="removerCustom(i)">✕</span>
+            </span>
+          </div>
+        </div>
+        
+        <div class="asp-footer">
+          <div class="asp-count">
+            {{ entityTypes.filter(e => e.selected).length + customAgents.length }} tipos selecionados
+          </div>
+          <button class="asp-confirm" @click="confirmarAgentes()">
+            Confirmar e Gerar Agentes →
+          </button>
+        </div>
       </div>
 
       <!-- Timeline -->
@@ -612,4 +728,35 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 .btn-ghost:hover { color: var(--text-primary); border-color: var(--border-md); }
 .btn-retry { background: var(--accent2); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .btn-retry:hover { opacity: .85; }
+
+/* ═══ AGENT SELECTION ═══ */
+.agent-select-panel { background:var(--bg-surface, #111118); border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:24px; margin-bottom:20px; }
+.asp-header h3 { font-size:18px; font-weight:700; color:#f0f0ff; margin-bottom:6px; }
+.asp-header p { font-size:13px; color:#8888aa; line-height:1.6; margin-bottom:16px; }
+.asp-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:10px; margin-bottom:20px; }
+.asp-card { display:flex; gap:10px; padding:12px; border:1px solid rgba(255,255,255,0.06); border-radius:10px; cursor:pointer; transition:all .2s; background:rgba(255,255,255,0.02); }
+.asp-card:hover { border-color:rgba(0,229,195,0.3); }
+.asp-selected { border-color:rgba(0,229,195,0.5); background:rgba(0,229,195,0.06); }
+.asp-check { font-size:16px; flex-shrink:0; }
+.asp-name { font-size:13px; font-weight:700; color:#f0f0ff; }
+.asp-desc { font-size:11px; color:#8888aa; margin-top:2px; }
+.asp-examples { font-size:10px; color:#555570; margin-top:4px; font-style:italic; }
+.asp-section { margin-top:16px; padding-top:16px; border-top:1px solid rgba(255,255,255,0.06); }
+.asp-section h4 { font-size:14px; font-weight:600; color:#f0f0ff; margin-bottom:10px; }
+.asp-regs { display:flex; flex-wrap:wrap; gap:6px; }
+.asp-reg-btn { padding:6px 14px; border-radius:20px; border:1px solid rgba(124,111,247,0.3); background:rgba(124,111,247,0.06); color:#7c6ff7; font-size:12px; font-weight:600; cursor:pointer; transition:all .2s; }
+.asp-reg-btn:hover { background:rgba(124,111,247,0.15); }
+.asp-reg-added { background:rgba(124,111,247,0.2); border-color:#7c6ff7; }
+.asp-custom-row { display:flex; gap:8px; }
+.asp-input { flex:1; padding:8px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:#f0f0ff; font-size:13px; outline:none; }
+.asp-input:focus { border-color:rgba(0,229,195,0.4); }
+.asp-add-btn { padding:8px 18px; border-radius:8px; border:none; background:#00e5c3; color:#09090f; font-weight:700; font-size:12px; cursor:pointer; }
+.asp-custom-list { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.asp-custom-tag { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; border-radius:20px; background:rgba(0,229,195,0.1); color:#00e5c3; font-size:12px; font-weight:600; }
+.asp-remove { cursor:pointer; opacity:0.6; font-size:10px; }
+.asp-remove:hover { opacity:1; }
+.asp-footer { display:flex; justify-content:space-between; align-items:center; margin-top:20px; padding-top:16px; border-top:1px solid rgba(255,255,255,0.06); }
+.asp-count { font-size:13px; color:#8888aa; font-weight:600; }
+.asp-confirm { padding:12px 28px; border-radius:10px; border:none; background:#00e5c3; color:#09090f; font-weight:700; font-size:14px; cursor:pointer; transition:transform .2s; }
+.asp-confirm:hover { transform:translateY(-2px); }
 </style>
