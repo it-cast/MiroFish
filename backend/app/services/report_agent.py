@@ -624,6 +624,18 @@ JACK WELCH: "Ranking forçado. A recomendação #1 é a única que importa."
     - Previsão + data + probabilidade ± margem
     - Ex: "Até Ago/2027, 60% ± 12% de adoção pelo público-alvo"
 
+12. **Posicionamento Percebido vs Desejado** — Gap de percepção:
+    - Como os agentes PERCEBEM o produto/marca vs como o cliente quer ser percebido
+    - O GAP entre percepção real e desejada é o insight central
+    - Palavras-chave associadas à marca pelos agentes
+    - Recomendação para fechar o gap de posicionamento
+
+13. **Valor da Análise** — ROI desta simulação:
+    - "Esta simulação custou R$X. Um focus group equivalente custaria R$50.000."
+    - "Uma decisão errada de lançamento pode custar R$500.000+."
+    - Riscos financeiros evitados com as descobertas deste relatório
+    - Próximos passos concretos que justificam o investimento
+
 ══════════════════════════════════════════════════════════════
 【REGRAS DE QUALIDADE — EXIGÊNCIAS DO CONSELHO】
 ══════════════════════════════════════════════════════════════
@@ -655,7 +667,7 @@ Retorne JSON com o formato:
     ]
 }
 
-O array sections DEVE ter EXATAMENTE 11 elementos, um para cada seção acima.
+O array sections DEVE ter EXATAMENTE 13 elementos, um para cada seção acima.
 """
 
 PLAN_USER_PROMPT_TEMPLATE = """\
@@ -671,7 +683,7 @@ Hipótese testada: {simulation_requirement}
 【AMOSTRA DE FATOS SIMULADOS】
 {related_facts_json}
 
-Com base nesses dados, elabore o plano completo do relatório com as 11 seções obrigatórias.
+Com base nesses dados, elabore o plano completo do relatório com as 13 seções obrigatórias.
 
 PARA CADA SEÇÃO, a descrição deve especificar:
 - Quais aspectos da simulação explorar
