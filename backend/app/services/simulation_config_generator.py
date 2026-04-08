@@ -553,7 +553,7 @@ Field descriptions:
 - work_hours (int array): Work hours
 - reasoning (string): Configuração"""
 
-        system_prompt = "You are a social media simulation expert for the Brazilian market. The reasoning field MUST be in Brazilian Portuguese. Return pure JSON."
+        system_prompt = "Você é um especialista em simulação de redes sociais para o mercado brasileiro. O campo reasoning DEVE ser em português do Brasil. Retorne APENAS JSON puro. NUNCA escreva em chinês ou inglês."
         system_prompt = f"{system_prompt}\n\n{get_language_instruction()}"
 
         try:
@@ -669,7 +669,7 @@ Return JSON format (no markdown):
     "reasoning": "<brief explanation>"
 }}"""
 
-        system_prompt = "You are a public opinion analysis expert for the Brazilian market. ALL text content (hot_topics, narrative_direction, post content, reasoning) MUST be in Brazilian Portuguese. Return pure JSON. The poster_type must exactly match available entity types."
+        system_prompt = "Você é um especialista em análise de opinião pública para o mercado brasileiro. TODO conteúdo textual (hot_topics, narrative_direction, content dos posts, reasoning) DEVE ser em português do Brasil. Retorne APENAS JSON puro. O poster_type deve corresponder exatamente aos tipos de entidade disponíveis. NUNCA escreva em chinês ou inglês."
         system_prompt = f"{system_prompt}\n\n{get_language_instruction()}\nIMPORTANT: The 'poster_type' field value MUST be in English PascalCase exactly matching the available entity types. Only 'content', 'narrative_direction', 'hot_topics' and 'reasoning' fields should use the specified language."
 
         try:
@@ -829,7 +829,7 @@ Return JSON format (no markdown):
     ]
 }}"""
 
-        system_prompt = "You are a social media behavior analysis expert for the Brazilian market. ALL natural language fields MUST be in Brazilian Portuguese (PT-BR). Return pure JSON."
+        system_prompt = "Você é um especialista em análise de comportamento em redes sociais para o mercado brasileiro. TODOS os campos de linguagem natural DEVEM ser em português do Brasil (PT-BR). Retorne APENAS JSON puro. NUNCA escreva em chinês ou inglês."
         system_prompt = f"{system_prompt}\n\n{get_language_instruction()}\nIMPORTANT: The 'stance' field value MUST be one of the English strings: 'supportive', 'opposing', 'neutral', 'observer'. All JSON field names and numeric values must remain unchanged. Only natural language text fields should use the specified language."
 
         try:
