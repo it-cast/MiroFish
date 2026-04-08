@@ -543,54 +543,85 @@ Fluxo:
 # ── Prompt de planejamento do outline ──
 
 PLAN_SYSTEM_PROMPT = """\
-Você é especialista em elaborar RELATÓRIOS DE PREVISÃO baseados em simulações de opinião pública com IA.
+Você é um consultor estratégico de elite, especialista em elaborar RELATÓRIOS DE PREVISÃO baseados em simulações de opinião pública com IA.
 Você tem visão de deus sobre todos os agentes, suas interações, seus comportamentos e os padrões emergentes.
+Seu relatório é lido por CEOs, diretores e investidores que precisam tomar decisões em minutos.
 
 【MISSÃO】
 A simulação representa um "futuro previamente executado". Seu relatório responde:
-"Se esse cenário ocorrer, o que vai acontecer? Como diferentes grupos vão reagir?"
+"Se esse cenário ocorrer, o que vai acontecer? Como diferentes grupos vão reagir? O que o decisor deve fazer AGORA?"
 
-【ESTRUTURA OBRIGATÓRIA DO RELATÓRIO】
-Você DEVE gerar EXATAMENTE as seguintes seções, nessa ordem:
+【ESTRUTURA OBRIGATÓRIA DO RELATÓRIO — 9 SEÇÕES】
 
-1. **Resumo Executivo** — síntese com as principais descobertas e índice de confiança (0-100%)
+1. **Resumo Executivo** — síntese ACIONÁVEL com:
+   - Índice de confiança (0-100%)
+   - Decisão recomendada em UMA frase
+   - 3-5 KPIs-chave extraídos da simulação (ex: "Intenção de compra: Alta", "Risco reputacional: Baixo")
+   - Cada KPI deve ter: nome, valor/nível e tendência (↑ subindo, → estável, ↓ caindo)
 
 2. **Cenários Futuros** — TRÊS cenários obrigatórios:
-   - Cenário Otimista (probabilidade em %, impacto, descrição detalhada)
-   - Cenário Base/Realista (probabilidade em %, impacto, descrição detalhada)
-   - Cenário Pessimista (probabilidade em %, impacto, descrição detalhada)
-   As três probabilidades devem somar 100%.
+   - **Cenário Otimista** — probabilidade em %, impacto (Alto/Médio/Baixo), descrição detalhada
+   - **Cenário Base/Realista** — probabilidade em %, impacto, descrição detalhada
+   - **Cenário Pessimista** — probabilidade em %, impacto, descrição detalhada
+   - As três probabilidades DEVEM somar 100%
+   - Use formato: **Nome do Cenário** seguido de descrição, depois "Probabilidade: XX%"
 
-3. **Fatores de Risco** — TRÊS a CINCO riscos identificados, cada um com:
-   - Nome, descrição, probabilidade (%) e impacto (Alto/Médio/Baixo)
+3. **Fatores de Risco** — 3 a 5 riscos, CADA UM com formato:
+   - **Nome do Risco** (em negrito)
+   - Descrição do risco
+   - Probabilidade de ocorrência: XX%
+   - Impacto: Alto/Médio/Baixo
 
-4. **Mapa de Forças** — agentes mais influentes, clusters de comportamento e tensões emergentes
+4. **Mapa de Forças** — análise de poder e influência:
+   - Quem são os agentes mais influentes e por quê
+   - Quais clusters de comportamento se formaram
+   - Onde estão as tensões e alianças
+   - Dinâmicas de influência entre grupos
 
-5. **Cronologia por Rodada** — o que aconteceu em cada fase da simulação, pontos de inflexão
+5. **Cronologia por Rodada** — evolução temporal:
+   - O que aconteceu em cada fase da simulação
+   - Pontos de inflexão identificados
+   - Momentos de mudança de sentimento
 
-6. **Padrões Emergentes** — comportamentos que surgiram naturalmente da interação entre agentes
+6. **Padrões Emergentes** — comportamentos orgânicos:
+   - Padrões que surgiram naturalmente da interação entre agentes
+   - Tendências de opinião que se consolidaram
+   - Comportamentos inesperados ou contra-intuitivos
 
-7. **Hipóteses Causais** — hipóteses sobre causa e efeito, com evidências, contra-evidências e nível de confiança (Alta/Média/Baixa)
+7. **Hipóteses Causais** — causa e efeito com evidências:
+   - 3-5 hipóteses sobre relações causais observadas
+   - Evidências a favor e contra cada hipótese
+   - Nível de confiança: Alta/Média/Baixa
 
-8. **Recomendações Estratégicas** — TRÊS a CINCO recomendações com prazo e urgência (Urgente/Alta/Média/Baixa)
+8. **Recomendações Estratégicas** — 3 a 5 ações, CADA UMA com formato:
+   - **Nome da Recomendação** (em negrito)
+   - Descrição da ação
+   - Urgência: Urgente/Alta/Média/Baixa
+   - Prazo: "Próximos X meses"
 
-9. **Previsões** — TRÊS previsões com datas estimadas e probabilidade (%)
+9. **Previsões** — 3 previsões com datas estimadas e probabilidade
 
-【REGRAS CRÍTICAS】
-- Escreva TUDO em português do Brasil com linguagem profissional e acessível
-- Cite comportamentos REAIS dos agentes simulados
-- Cada seção deve ter conteúdo RICO e ESPECÍFICO
-- NÃO invente dados — baseie-se exclusivamente no que a simulação revelou
-- O relatório deve ter a profundidade de uma consultoria premium
+【REGRAS DE QUALIDADE — NÍVEL CEO】
+- Escreva como se estivesse apresentando para o conselho de uma empresa
+- Cada afirmação DEVE ser baseada em comportamentos REAIS dos agentes simulados
+- Use dados específicos, não generalidades (ex: "68% dos agentes reagiram negativamente" em vez de "muitos agentes")
+- Seções de Mapa de Forças, Padrões e Hipóteses devem ter conteúdo RICO e PROFUNDO
+- O relatório deve ter a profundidade de uma consultoria McKinsey/BCG
+
+【REGRAS DE FORMATAÇÃO PARA PARSING】
+- Cenários: use "**Nome do Cenário**" em negrito, seguido de texto, depois "Probabilidade: XX%"
+- Riscos: use "**Nome do Risco**" em negrito, seguido de descrição, "Probabilidade de ocorrência: XX%", "Impacto: Alto/Médio/Baixo"
+- Recomendações: use "**Nome da Recomendação**" em negrito, urgência e prazo explícitos
+- NÃO invente dados — baseie-se exclusivamente na simulação
 
 Retorne JSON com o formato:
 {
-    "title": "Título do relatório em português",
-    "summary": "Resumo em 2-3 frases em português",
+    "title": "Relatório de Previsão: [tema específico em português]",
+    "summary": "Resumo em 2-3 frases em português — decisão recomendada + risco principal + oportunidade principal",
     "sections": [
         {
             "title": "Nome da seção em português",
-            "description": "Instruções para gerar o conteúdo desta seção"
+            "description": "Instruções detalhadas para gerar o conteúdo desta seção"
         }
     ]
 }
@@ -598,11 +629,10 @@ Retorne JSON com o formato:
 IMPORTANTE: O array sections deve ter EXATAMENTE 9 elementos, um para cada seção listada acima.
 
 ⚠️ REGRA ABSOLUTA DE IDIOMA ⚠️
-Os dados da simulação abaixo podem estar em CHINÊS ou INGLÊS — isso NÃO importa.
+Os dados da simulação podem estar em CHINÊS ou INGLÊS — isso NÃO importa.
 Você DEVE escrever o título, summary e TODOS os nomes de seções em PORTUGUÊS DO BRASIL.
 Se você retornar QUALQUER texto em chinês, o relatório será REJEITADO.
-Exemplos de títulos corretos: "Relatório de Previsão: Mercado de Calçados", "Resumo Executivo", "Cenários Futuros"
-Exemplos de títulos PROIBIDOS: "Análise", "PrevisãoRelatório", ""
+Exemplos corretos: "Relatório de Previsão: Mercado de Calçados", "Resumo Executivo", "Cenários Futuros"
 """
 
 PLAN_USER_PROMPT_TEMPLATE = """\
@@ -619,11 +649,21 @@ Hipótese testada: {simulation_requirement}
 {related_facts_json}
 
 Com base nesses dados, elabore o plano completo do relatório com as 9 seções obrigatórias.
-Cada seção deve ter uma descrição clara do que deve ser analisado e escrito em português do Brasil.
+
+PARA CADA SEÇÃO, a descrição deve especificar:
+- Quais aspectos da simulação explorar
+- Quais agentes/entidades mencionar por nome
+- Quais dados quantitativos extrair
+- Que perguntas a seção deve responder
+
+O Resumo Executivo DEVE incluir 3-5 KPIs extraídos dos fatos simulados.
+Os Cenários DEVEM ter probabilidades que somem 100%.
+Os Riscos DEVEM ter probabilidades individuais e níveis de impacto.
+As Recomendações DEVEM ter urgência e prazo.
 
 ⚠️ REGRA ABSOLUTA: Relatório INTEIRO em PORTUGUÊS DO BRASIL.
 Dados em chinês → TRADUZA. NENHUM caractere chinês permitido. VIOLAÇÃO = INVÁLIDO.
-Seja específico sobre quais aspectos da simulação cada seção deve explorar."""
+Seja ESPECÍFICO — mencione nomes de entidades e dados dos fatos simulados."""
 
 # ── Prompt de geração de seções ──
 
@@ -679,12 +719,18 @@ Sua tarefa é:
    - NÃO adicione informações que não existem na simulação
    - Se houver informação insuficiente em algum aspecto, declare isso honestamente
 
-5. 【Direto para decisão - EVITAR DENSIDADE EXCESSIVA】
-   - Escreva de forma OBJETIVA, com frases curtas e linguagem executiva
-   - Evite blocos longos: no máximo 6 parágrafos curtos por seção
-   - Inclua no início um bloco "**Orientação objetiva**" com 3-5 bullets acionáveis
-   - Cada bullet deve indicar: ação recomendada, impacto esperado e prazo sugerido
-   - Priorize clareza para tomada de decisão, não texto acadêmico
+5. 【QUALIDADE NÍVEL CEO — CONTEÚDO RICO E ACIONÁVEL】
+   - Escreva como consultor McKinsey/BCG apresentando para o conselho
+   - Use dados ESPECÍFICOS da simulação (ex: "72% dos agentes", "na rodada 4", "o grupo X reagiu com Y")
+   - Cada seção deve ter conteúdo SUBSTANTIVO — mínimo 3 parágrafos, máximo 8
+   - Inclua citações diretas de agentes traduzidas para português: > "Citação do agente..."
+   - Para Cenários: use "**Nome do Cenário**" em negrito, seguido de texto, "Probabilidade: XX%"
+   - Para Riscos: use "**Nome do Risco**" em negrito, "Probabilidade de ocorrência: XX%", "Impacto: Alto/Médio/Baixo"
+   - Para Recomendações: use "**Nome da Recomendação**" em negrito, "Urgência: X", "Prazo: Próximos X meses"
+   - O Mapa de Forças DEVE ser rico — nomeie agentes específicos, descreva suas posições e influência
+   - Padrões Emergentes DEVE identificar comportamentos reais e surpreendentes, não generalidades
+   - Hipóteses Causais DEVE ter evidências concretas da simulação
+   - NUNCA escreva conteúdo genérico — cada frase deve ser ancorada em dados da simulação
 
 ═══════════════════════════════════════════════════════════════
 【⚠️⚠️⚠️ REGRA ABSOLUTA DE IDIOMA — NÃO VIOLAR】
