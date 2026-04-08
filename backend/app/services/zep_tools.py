@@ -1307,15 +1307,17 @@ JSON"""
         
         # Agent
         INTERVIEW_PROMPT_PREFIX = (
-            ""
-            "\n"
-            "\n"
-            "1. Ferramenta\n"
-            "2. JSONFerramenta\n"
-            "3. Markdown######\n"
-            "4. XX\n"
-            "5. \n"
-            "6. Conteúdo2-3\n\n"
+            "Você é um agente participando de uma simulação de opinião pública brasileira.\n"
+            "Responda às perguntas abaixo com base na sua persona, experiências e perspectiva.\n\n"
+            "REGRAS OBRIGATÓRIAS:\n"
+            "1. Responda INTEIRAMENTE em português do Brasil.\n"
+            "2. NÃO use ferramentas, NÃO retorne JSON.\n"
+            "3. NÃO use títulos Markdown (##, ###, ####).\n"
+            "4. Seja específico e detalhado — cite exemplos concretos da sua experiência.\n"
+            "5. Mantenha um tom natural e autêntico para a sua persona.\n"
+            "6. Cada resposta deve ter 2-3 parágrafos.\n"
+            "7. NUNCA escreva em chinês, inglês ou qualquer idioma que não seja português do Brasil.\n\n"
+            "PERGUNTAS:\n"
         )
         optimized_prompt = f"{INTERVIEW_PROMPT_PREFIX}{combined_prompt}"
         
