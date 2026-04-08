@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '../components/layout/AppShell.vue'
 import AugurButton from '../components/ui/AugurButton.vue'
@@ -17,8 +17,9 @@ let reportPollTimer = null
 
 function hasReportContent(raw) {
   const sections = raw?.outline?.sections || []
-  const hasSectionBody = sections.some(s => (s?.content || '').trim().length > 0)
-  return hasSectionBody
+  // Exigir pelo menos 2 seções com conteúdo substancial (50+ chars)
+  const sectionsWithContent = sections.filter(s => (s?.content || '').trim().length > 50)
+  return sectionsWithContent.length >= 2
 }
 
 async function carregarRelatorio() {
@@ -77,6 +78,29 @@ onUnmounted(() => {
   if (reportPollTimer) {
     clearInterval(reportPollTimer)
     reportPollTimer = null
+  }
+})
+
+// Watch para recarregar quando mudar de relatório sem remount
+watch(() => route.params.reportId, async (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    carregando.value = true
+    erro.value = ''
+    if (reportPollTimer) { clearInterval(reportPollTimer); reportPollTimer = null }
+    try {
+      const raw = await carregarRelatorio()
+      iniciarPollingSeNecessario(raw)
+      if (raw?.simulation_id) {
+        try {
+          const aRes = await service.get(`/api/analytics/${raw.simulation_id}`)
+          analytics.value = aRes?.data?.data || aRes?.data || null
+        } catch {}
+      }
+    } catch (e) {
+      erro.value = e?.response?.data?.error || e?.message || 'Erro ao carregar relatório.'
+    } finally {
+      carregando.value = false
+    }
   }
 })
 
