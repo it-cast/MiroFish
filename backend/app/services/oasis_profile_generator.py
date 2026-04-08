@@ -641,10 +641,11 @@ class OasisProfileGenerator:
     
     def _get_system_prompt(self, is_individual: bool) -> str:
         """System prompt para geração de perfis de agentes."""
-        base_prompt = """You are an expert social media user persona generator for a Brazilian market simulation.
-CRITICAL LANGUAGE RULE: ALL text content (bio, persona, interested_topics) MUST be written in Brazilian Portuguese (PT-BR).
-Do NOT write in Chinese, English, or any other language. Only PT-BR.
-Create detailed, realistic personas. Must return valid JSON. All string values must not contain unescaped newlines."""
+        base_prompt = """Você é um especialista em geração de personas de usuários de redes sociais para simulação do mercado brasileiro.
+REGRA CRÍTICA DE IDIOMA: TODO conteúdo textual (bio, persona, interested_topics) DEVE ser escrito em português do Brasil (PT-BR).
+NÃO escreva em chinês, inglês ou qualquer outro idioma. Apenas PT-BR.
+Crie personas detalhadas e realistas. Retorne JSON válido. Valores string não devem conter quebras de linha não escapadas.
+NUNCA use caracteres chineses em nenhum campo."""
         return f"{base_prompt}\n\n{get_language_instruction()}"
     
     def _build_individual_persona_prompt(
