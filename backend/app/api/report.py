@@ -5,6 +5,11 @@ SimulaçãoRelatórioGerar
 
 import os
 import traceback
+
+try:
+    from ..services.pdf_generator import PDFGenerator, HAS_FPDF
+except ImportError:
+    HAS_FPDF = False
 import threading
 from flask import request, jsonify, send_file
 
@@ -403,9 +408,11 @@ def list_reports():
 @report_bp.route('/<report_id>/download', methods=['GET'])
 def download_report(report_id: str):
     """
-    RelatórioMarkdown
-    
-    Markdown
+    Gera e retorna PDF profissional do relatório.
+    Fallback para Markdown se fpdf2 não estiver instalado.
+    Query params:
+        - format: 'pdf' (default) ou 'md'
+        - client: nome do cliente para personalização
     """
     try:
         report = ReportManager.get_report(report_id)
@@ -416,29 +423,65 @@ def download_report(report_id: str):
                 "error": t('api.reportNotFound', id=report_id)
             }), 404
         
+        fmt = request.args.get('format', 'pdf').lower()
+        client_name = request.args.get('client', '')
+        
+        # Montar dados do relatório
+        report_data = {
+            "outline": {
+                "title": report.outline.title if report.outline else "Relatório",
+                "summary": report.outline.summary if report.outline else "",
+                "sections": [
+                    {"title": s.title, "content": s.content or ""}
+                    for s in (report.outline.sections if report.outline else [])
+                ]
+            },
+            "completed_at": getattr(report, 'completed_at', None),
+            "created_at": getattr(report, 'created_at', None),
+        }
+        
+        # ═══ PDF ═══
+        if fmt == 'pdf' and HAS_FPDF:
+            report_folder = ReportManager._ensure_report_folder(report_id)
+            pdf_path = os.path.join(report_folder, f"{report_id}.pdf")
+            
+            PDFGenerator.generate(report_data, pdf_path, client_name=client_name)
+            
+            return send_file(
+                pdf_path,
+                as_attachment=True,
+                download_name=f"AUGUR-{report_id[:8]}.pdf",
+                mimetype='application/pdf'
+            )
+        
+        # ═══ Fallback: Markdown ═══
         md_path = ReportManager._get_report_markdown_path(report_id)
         
         if not os.path.exists(md_path):
-            # MDGerar
             import tempfile
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-                f.write(report.markdown_content)
+            md_content = f"# {report_data['outline']['title']}\n\n"
+            md_content += f"{report_data['outline']['summary']}\n\n"
+            for s in report_data['outline']['sections']:
+                md_content += f"## {s['title']}\n\n{s['content']}\n\n"
+            
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as f:
+                f.write(md_content)
                 temp_path = f.name
             
             return send_file(
                 temp_path,
                 as_attachment=True,
-                download_name=f"{report_id}.md"
+                download_name=f"AUGUR-{report_id[:8]}.md"
             )
         
         return send_file(
             md_path,
             as_attachment=True,
-            download_name=f"{report_id}.md"
+            download_name=f"AUGUR-{report_id[:8]}.md"
         )
         
     except Exception as e:
-        logger.error(f"RelatórioFalhou: {str(e)}")
+        logger.error(f"Download falhou: {str(e)}")
         return jsonify({
             "success": False,
             "error": str(e),
