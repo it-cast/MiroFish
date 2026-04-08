@@ -132,6 +132,14 @@ class GraphBuilderService:
             )
             
             chunks = TextProcessor.split_text(text, chunk_size, chunk_overlap)
+            
+            # Prefixar chunks com instrução PT-BR para influenciar extração do Zep
+            _CHUNK_LANG_PREFIX = (
+                "[IDIOMA: Português do Brasil] "
+                "[INSTRUÇÃO: Extraia entidades, fatos e relacionamentos em português do Brasil. "
+                "Traduza qualquer conteúdo em outro idioma para português.] \n\n"
+            )
+            chunks = [f"{_CHUNK_LANG_PREFIX}{chunk}" for chunk in chunks]
             total_chunks = len(chunks)
             self.task_manager.update_task(
                 task_id,
