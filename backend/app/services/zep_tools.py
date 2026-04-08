@@ -1070,22 +1070,25 @@ class ZepToolsService:
         
         Busca
         """
-        system_prompt = """AnáliseSimulação
+        system_prompt = """Você é um especialista em análise de simulações de opinião pública.
+Sua tarefa é decompor uma consulta complexa em sub-consultas mais específicas para buscar informações no grafo de conhecimento.
 
-1. SimulaçãoAgent
-2. 
-3. Simulação
-4. JSON{"sub_queries": ["1", "2", ...]}"""
+REGRAS:
+1. Considere diferentes ângulos: agentes, comportamentos, tendências, métricas
+2. Cada sub-consulta deve focar em um aspecto específico
+3. Mantenha relevância com o contexto da simulação
+4. Retorne JSON no formato: {"sub_queries": ["consulta 1", "consulta 2", ...]}
+5. Escreva TUDO em português do Brasil"""
 
-        user_prompt = f"""Simulação
+        user_prompt = f"""Contexto da simulação:
 {simulation_requirement}
 
-{f"Relatório{report_context[:500]}" if report_context else ""}
+{f"Contexto do relatório: {report_context[:500]}" if report_context else ""}
 
-{max_queries}
+Gere no máximo {max_queries} sub-consultas para:
 {query}
 
-JSON"""
+Retorne JSON."""
 
         try:
             response = self.llm.chat_json(
@@ -1530,17 +1533,18 @@ JSON"""
             }
             agent_summaries.append(summary)
         
-        system_prompt = """SimulaçãoAgent
+        system_prompt = """Você é um especialista em selecionar os agentes mais relevantes para uma entrevista.
 
-1. Agent/
-2. Agent
-3. 
-4. 
+REGRAS:
+1. Selecione agentes com perspectivas diversas e relevantes para o tema
+2. Priorize agentes com opiniões fortes (a favor ou contra)
+3. Inclua uma mistura de perfis (diferentes papéis, idades, posições)
+4. Justifique sua seleção
 
-JSON
+Retorne JSON no formato:
 {
-    "selected_indices": [Agent],
-    "reasoning": ""
+    "selected_indices": [índices dos agentes selecionados],
+    "reasoning": "Justificativa da seleção em português do Brasil"
 }"""
 
         user_prompt = f"""
@@ -1552,7 +1556,7 @@ Simulação
 Agent{len(agent_summaries)}
 {json.dumps(agent_summaries, ensure_ascii=False, indent=2)}
 
-{max_agents}Agent"""
+Selecione no máximo {max_agents} agentes mais relevantes para o tema."""
 
         try:
             response = self.llm.chat_json(
@@ -1592,16 +1596,18 @@ Agent{len(agent_summaries)}
         
         agent_roles = [a.get("profession", "") for a in selected_agents]
         
-        system_prompt = """/Gerar3-5
+        system_prompt = """Você é um especialista em conduzir entrevistas qualitativas de pesquisa de mercado.
+Gere 3 a 5 perguntas de entrevista relevantes e incisivas.
 
-1. 
-2. 
-3. 
-4. 
-5. 50
-6. 
+REGRAS:
+1. Perguntas devem ser abertas e provocativas
+2. Explore motivações, medos e expectativas
+3. Inclua perguntas sobre comportamento e decisão
+4. Adapte ao perfil dos entrevistados
+5. Cada pergunta deve ter no máximo 50 palavras
+6. Escreva TUDO em português do Brasil
 
-JSON{"questions": ["1", "2", ...]}"""
+Retorne JSON no formato: {"questions": ["pergunta 1", "pergunta 2", ...]}"""
 
         user_prompt = f"""{interview_requirement}
 
@@ -1609,7 +1615,7 @@ Simulação{simulation_requirement if simulation_requirement else ""}
 
 {', '.join(agent_roles)}
 
-Gerar3-5"""
+Gere 3 a 5 perguntas de entrevista em português do Brasil."""
 
         try:
             response = self.llm.chat_json(
@@ -1646,26 +1652,29 @@ Gerar3-5"""
             interview_texts.append(f"【{interview.agent_name}（{interview.agent_role}）】\n{interview.response[:500]}")
         
         quote_instruction = "" if get_locale() == 'zh' else 'Use quotation marks "" when quoting interviewees'
-        system_prompt = f"""Gerar
+        system_prompt = f"""Você é um especialista em sintetizar entrevistas qualitativas para relatórios executivos.
+Gere um resumo estruturado das entrevistas.
 
-1. 
-2. 
-3. 
-4. 
-5. 1000
+REGRAS:
+1. Identifique os principais temas e padrões nas respostas
+2. Destaque pontos de convergência e divergência entre entrevistados
+3. Extraia insights acionáveis
+4. Mantenha citações relevantes dos entrevistados
+5. Máximo de 1000 palavras
 
-- 
-- Markdown######
-- ---***
+FORMATO:
+- Escreva em português do Brasil
+- NÃO use títulos Markdown (##, ###, ####)
+- Use travessão (—) para separar seções
 - {quote_instruction}
-- ****Markdown"""
+- Use **negrito** para destaques, sem abusar"""
 
-        user_prompt = f"""{interview_requirement}
+        user_prompt = f"""Tema da entrevista: {interview_requirement}
 
-Conteúdo
+Respostas dos entrevistados:
 {"".join(interview_texts)}
 
-Gerar"""
+Gere um resumo analítico em português do Brasil."""
 
         try:
             summary = self.llm.chat(
