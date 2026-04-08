@@ -134,6 +134,12 @@ function navSim(s) {
     <div v-else-if="projetos.length === 0" class="empty">
       <div class="empty-icon">🔭</div>
       <div class="empty-title">Bem-vindo ao AUGUR</div>
+      <div class="empty-demo">
+        <button class="demo-btn" @click="$router.push('/demo')">
+          📊 Ver relatório de demonstração
+        </button>
+        <span class="demo-hint">Veja um exemplo real de análise preditiva</span>
+      </div>
       <div class="empty-sub">
         Crie seu primeiro projeto para começar a prever como o mercado vai reagir
         antes de lançar seu produto, marca ou serviço.
@@ -351,4 +357,9 @@ function navSim(s) {
   .metrics-row { grid-template-columns:repeat(2,1fr); }
   .projetos-grid { grid-template-columns:1fr; }
 }
+
+.empty-demo { margin-bottom:24px; display:flex; flex-direction:column; align-items:center; gap:8px; }
+.demo-btn { padding:12px 28px; border-radius:10px; border:2px solid rgba(0,229,195,0.4); background:rgba(0,229,195,0.08); color:#00e5c3; font-weight:700; font-size:14px; cursor:pointer; transition:all .2s; }
+.demo-btn:hover { background:rgba(0,229,195,0.15); transform:translateY(-2px); }
+.demo-hint { font-size:11px; color:#555570; }
 </style>
