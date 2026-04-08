@@ -108,6 +108,11 @@ const routes = [
     meta: { public: true }
   },
   {
+    path: '/demo',
+    name: 'Demo',
+    component: DemoReportView
+  },
+  {
     path: '/:pathMatch(.*)*',
     redirect: '/'
   }
