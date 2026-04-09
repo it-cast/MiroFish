@@ -106,6 +106,11 @@ watch(() => route.params.reportId, async (newId, oldId) => {
 
 // ─── Dados base ───────────────────────────────────────────────
 const titulo   = computed(() => report.value?.outline?.title   || 'Relatório de Previsão')
+const dataFormatada = computed(() => {
+  const d = report.value?.completed_at || report.value?.created_at || ''
+  if (!d) return ''
+  try { const dt = new Date(d); return dt.toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric' }) } catch { return '' }
+})
 const secoes   = computed(() => report.value?.outline?.sections || [])
 const simReq   = computed(() => report.value?.simulation_requirement || '')
 const geradoEm = computed(() => {
@@ -374,10 +379,10 @@ const confianca = computed(() => {
 // Badges de contagem
 const countBadges = computed(() => [
   { label:'Cenários',  val: cenarios.value.length,       color:'#00e5c3', icon:'🔭' },
-  { label:'Riscos',    val: parsedRiscos.value.length,    color:'#f5a623', icon:'⚠️' },
-  { label:'Insights',  val: parsedInsights.value.length,  color:'#7c6ff7', icon:'💡' },
-  { label:'Recomend.', val: parsedRecomendacoes.value.length, color:'#1da1f2', icon:'🎯' },
-])
+  { label:'Riscos',    val: parsedRiscos.value.length || (secRiscos.value?.content ? '✓' : 0),    color:'#f5a623', icon:'⚠️' },
+  { label:'Insights',  val: parsedInsights.value.length || (secInsights.value?.content ? '✓' : 0),  color:'#7c6ff7', icon:'💡' },
+  { label:'Recomend.', val: parsedRecomendacoes.value.length || (secRecomendacoes.value?.content ? '✓' : 0), color:'#1da1f2', icon:'🎯' },
+].filter(b => b.val))
 
 // KPI Cards
 const kpiCards = computed(() => {
@@ -833,6 +838,32 @@ function abrirChat() {
         </div>
       </header>
 
+      <!-- ═══ CONTEXTO DA ANÁLISE ═══ -->
+      <section class="ctx-page">
+        <div class="ctx-header">
+          <div class="ctx-logo">🔭</div>
+          <div>
+            <h2 class="ctx-title">{{ titulo }}</h2>
+            <p class="ctx-sub">Relatório de Previsão · {{ dataFormatada }}</p>
+          </div>
+        </div>
+        <div class="ctx-grid">
+          <div class="ctx-card">
+            <span class="ctx-icon">📋</span>
+            <div class="ctx-label">HIPÓTESE TESTADA</div>
+            <div class="ctx-value ctx-hipotese">{{ truncar(simReq || 'Não disponível', 250) }}</div>
+          </div>
+          <div class="ctx-stats">
+            <div class="ctx-stat"><span class="ctx-stat-val">{{ report?.outline?.sections?.length || 0 }}</span><span class="ctx-stat-lbl">seções</span></div>
+            <div class="ctx-stat"><span class="ctx-stat-val">{{ confianca }}%</span><span class="ctx-stat-lbl">confiança</span></div>
+            <div class="ctx-stat"><span class="ctx-stat-val">{{ cenarios.length }}</span><span class="ctx-stat-lbl">cenários</span></div>
+          </div>
+        </div>
+        <div class="ctx-disclaimer">
+          Esta análise simula a reação de agentes autônomos ao cenário descrito. Os resultados representam cenários possíveis baseados em interação multiagente com inteligência artificial e não garantem resultados futuros.
+        </div>
+      </section>
+
       <!-- ═══ CAMADA 1: DECISÃO EM 30 SEGUNDOS ═══ -->
       <div class="layer-label"><span class="ll-icon">⚡</span> Decisão em 30 segundos</div>
 
@@ -990,14 +1021,17 @@ function abrirChat() {
       </section>
 
       <!-- ═══ 6. INSIGHTS PRINCIPAIS ═══ -->
-      <section class="rpt-section" v-if="achadosRelevantes.length">
-        <div class="sec-header"><span class="sec-icon">💡</span><h3>Insights Principais</h3><span class="sec-count">{{ achadosRelevantes.length }}</span></div>
-        <div class="insights-list">
+      <section class="rpt-section" v-if="secInsights?.content || achadosRelevantes.length">
+        <div class="sec-header"><span class="sec-icon">💡</span><h3>Insights Principais</h3></div>
+        <!-- Cards se parser funcionou bem (2+ itens com texto > 20 chars) -->
+        <div class="insights-list" v-if="achadosRelevantes.length >= 2 && achadosRelevantes.every(a => a.text.length > 20)">
           <div v-for="(a, i) in achadosRelevantes" :key="i" class="insight-item">
             <span class="ins-num">{{ i + 1 }}</span>
             <p>{{ a.text }}</p>
           </div>
         </div>
+        <!-- Fallback: renderizar markdown completo (qualidade garantida) -->
+        <div v-else-if="secInsights?.content" class="md-body" v-html="md(secInsights.content)"></div>
       </section>
 
       <!-- ═══ 6b. ANÁLISE EMOCIONAL ═══ -->
@@ -1007,9 +1041,10 @@ function abrirChat() {
       </section>
 
       <!-- ═══ 7. FATORES DE RISCO ═══ -->
-      <section class="rpt-section" v-if="parsedRiscos.length">
-        <div class="sec-header"><span class="sec-icon">⚠️</span><h3>Fatores de Risco</h3><span class="sec-count">{{ parsedRiscos.length }}</span></div>
-        <div class="risk-cards">
+      <section class="rpt-section" v-if="secRiscos?.content || parsedRiscos.length">
+        <div class="sec-header"><span class="sec-icon">⚠️</span><h3>Fatores de Risco</h3></div>
+        <!-- Cards se parser funcionou bem (2+ riscos com nomes reais) -->
+        <div class="risk-cards" v-if="parsedRiscos.length >= 2">
           <div v-for="(r, i) in parsedRiscos" :key="i" class="risk-card" :style="{'--rc': r.color}">
             <div class="rc-header">
               <h4>{{ r.name }}</h4>
@@ -1023,16 +1058,19 @@ function abrirChat() {
             </div>
           </div>
         </div>
+        <!-- Fallback: markdown completo -->
+        <div v-else-if="secRiscos?.content" class="md-body" v-html="md(secRiscos.content)"></div>
       </section>
 
       <!-- ═══ 8. RECOMENDAÇÕES ESTRATÉGICAS ═══ -->
-      <section class="rpt-section" v-if="parsedRecomendacoes.length">
-        <div class="sec-header"><span class="sec-icon">⚡</span><h3>Recomendações Estratégicas</h3><span class="sec-count">{{ parsedRecomendacoes.length }}</span></div>
-        <div class="rec-cards">
-          <div v-for="(r, i) in parsedRecomendacoes" :key="i" class="rec-card" :class="{'rec-top': i === 0}">
+      <section class="rpt-section" v-if="secRecomendacoes?.content || parsedRecomendacoes.length">
+        <div class="sec-header"><span class="sec-icon">⚡</span><h3>Recomendações Estratégicas</h3></div>
+        <!-- Cards se parser funcionou (2+ recomendações) -->
+        <div class="rec-cards" v-if="parsedRecomendacoes.length >= 2">
+          <div v-for="(r, i) in parsedRecomendacoes" :key="i" class="rec-card" :class="{'rec-highlight': i === 0}">
             <div class="rec-num">{{ i + 1 }}</div>
             <div class="rec-body">
-              <div class="rec-top">
+              <div class="rec-top-row">
                 <h4>{{ r.name }}</h4>
                 <span v-if="r.urgencia" class="rec-urg" :style="{background: r.urgColor+'18', color: r.urgColor, border: '1px solid '+r.urgColor+'44'}">{{ r.urgencia }}</span>
               </div>
@@ -1041,6 +1079,8 @@ function abrirChat() {
             </div>
           </div>
         </div>
+        <!-- Fallback: markdown -->
+        <div v-else-if="secRecomendacoes?.content" class="md-body" v-html="md(secRecomendacoes.content)"></div>
       </section>
 
       <!-- ═══ 8b. ESTRATÉGIA DE COMUNICAÇÃO ═══ -->
@@ -1056,14 +1096,17 @@ function abrirChat() {
       </section>
 
       <!-- ═══ 9. PREVISÕES ═══ -->
-      <section class="rpt-section" v-if="parsedPrevisoes.length">
-        <div class="sec-header"><span class="sec-icon">🔮</span><h3>Previsões</h3><span class="sec-count">{{ parsedPrevisoes.length }}</span></div>
-        <div class="prev-list">
+      <section class="rpt-section" v-if="secPrevisoes?.content || parsedPrevisoes.length">
+        <div class="sec-header"><span class="sec-icon">🔮</span><h3>Previsões</h3></div>
+        <!-- Cards se parser funcionou -->
+        <div class="prev-list" v-if="parsedPrevisoes.length >= 2 && parsedPrevisoes.every(p => p.text.length > 30)">
           <div v-for="(p, i) in parsedPrevisoes" :key="i" class="prev-item">
             <span class="prev-num">{{ i + 1 }}</span>
             <p>{{ p.text }}</p>
           </div>
         </div>
+        <!-- Fallback: markdown -->
+        <div v-else-if="secPrevisoes?.content" class="md-body" v-html="md(secPrevisoes.content)"></div>
       </section>
 
       <!-- ═══ CAMADA 3: ANÁLISE PROFUNDA — 30 MINUTOS ═══ -->
@@ -1107,6 +1150,43 @@ function abrirChat() {
       <section class="rpt-section valor-section" v-if="secValorAnalise?.content">
         <div class="sec-header"><span class="sec-icon">💎</span><h3>Valor da Análise</h3></div>
         <div class="md-body" v-html="md(secValorAnalise.content)"></div>
+      </section>
+
+      <!-- ═══ SEÇÃO DE FECHAMENTO ═══ -->
+      <section class="closing-page">
+        <div class="closing-inner">
+          <div class="closing-verdict" :style="{color: veredicto.color}">
+            <span class="closing-icon">{{ veredicto.icon }}</span>
+            <h2>{{ veredicto.label }}</h2>
+          </div>
+          <p class="closing-summary">{{ (report?.outline?.summary || '').replace(/VEREDICTO:[^.]*\./i, '').trim() }}</p>
+          
+          <div class="closing-trio">
+            <div class="closing-item">
+              <span class="ci-icon">🎯</span>
+              <h4>Cenário mais provável</h4>
+              <p>{{ cenarios[0]?.nome || '—' }} ({{ cenarios[0]?.prob || 0 }}%)</p>
+            </div>
+            <div class="closing-item ci-action">
+              <span class="ci-icon">⚡</span>
+              <h4>Ação prioritária</h4>
+              <p>{{ parsedRecomendacoes[0]?.name || briefingCEO.decisao }}</p>
+            </div>
+            <div class="closing-item">
+              <span class="ci-icon">⚠️</span>
+              <h4>Risco principal</h4>
+              <p>{{ parsedRiscos[0]?.name || briefingCEO.risco }}</p>
+            </div>
+          </div>
+
+          <div class="closing-footer">
+            <div class="closing-brand">
+              <span class="closing-logo">🔭</span>
+              <span>AUGUR</span>
+            </div>
+            <p class="closing-tagline">Preveja o futuro. Antes que ele aconteça.</p>
+          </div>
+        </div>
       </section>
 
       <!-- ═══ SEÇÕES GENÉRICAS ═══ -->
@@ -1311,12 +1391,54 @@ function abrirChat() {
 .ll-icon { font-size:14px; }
 
 /* ═══ STACK RANKING — #1 HIGHLIGHTED ═══ */
-.rec-top { border:2px solid var(--c-accent) !important; background:linear-gradient(135deg, rgba(0,229,195,0.06), rgba(124,111,247,0.03)) !important; position:relative; }
-.rec-top::after { content:'#1 PRIORIDADE'; position:absolute; top:-10px; right:16px; background:var(--c-accent); color:#09090f; font-size:9px; font-weight:800; padding:2px 10px; border-radius:10px; letter-spacing:1px; }
-.rec-top .rec-num { background:var(--c-accent) !important; color:#09090f !important; font-size:18px; width:40px; height:40px; }
+.rec-highlight { border:2px solid var(--c-accent) !important; background:linear-gradient(135deg, rgba(0,229,195,0.06), rgba(124,111,247,0.03)) !important; position:relative; }
+.rec-highlight::after { content:'#1 PRIORIDADE'; position:absolute; top:-10px; right:16px; background:var(--c-accent); color:#09090f; font-size:9px; font-weight:800; padding:2px 10px; border-radius:10px; letter-spacing:1px; }
+.rec-highlight .rec-num { background:var(--c-accent) !important; color:#09090f !important; font-size:18px; width:40px; height:40px; }
 
 /* ═══ VALOR DA ANÁLISE ═══ */
 .valor-section { background:linear-gradient(135deg, rgba(245,166,35,0.04), rgba(0,229,195,0.03)) !important; border-color:rgba(245,166,35,0.2) !important; }
+
+/* ═══ CONTEXT PAGE ═══ */
+.ctx-page { background:linear-gradient(135deg, rgba(124,111,247,0.06), rgba(0,229,195,0.04)); border:1px solid rgba(124,111,247,0.15); border-radius:20px; padding:32px; margin-bottom:24px; }
+.ctx-header { display:flex; gap:16px; align-items:center; margin-bottom:20px; }
+.ctx-logo { font-size:36px; }
+.ctx-title { font-size:20px; font-weight:700; color:var(--c-text); line-height:1.3; }
+.ctx-sub { font-size:12px; color:var(--c-dim); margin-top:2px; }
+.ctx-grid { display:grid; grid-template-columns:1fr auto; gap:20px; margin-bottom:16px; }
+.ctx-card { background:var(--c-card); border:1px solid var(--c-border); border-radius:14px; padding:18px; }
+.ctx-icon { font-size:18px; }
+.ctx-label { font-size:9px; font-weight:700; letter-spacing:1.5px; color:var(--c-dim); text-transform:uppercase; margin:6px 0 8px; }
+.ctx-value { font-size:14px; color:var(--c-muted); line-height:1.65; }
+.ctx-hipotese { font-style:italic; }
+.ctx-stats { display:flex; flex-direction:column; gap:8px; justify-content:center; }
+.ctx-stat { display:flex; align-items:center; gap:10px; background:var(--c-card); border:1px solid var(--c-border); border-radius:10px; padding:10px 16px; min-width:140px; }
+.ctx-stat-val { font-size:18px; font-weight:800; color:var(--c-accent); font-family:'JetBrains Mono',monospace; }
+.ctx-stat-lbl { font-size:11px; color:var(--c-dim); font-weight:600; }
+.ctx-disclaimer { font-size:11px; color:var(--c-dim); line-height:1.6; padding-top:14px; border-top:1px solid var(--c-border); }
+
+/* ═══ CLOSING PAGE ═══ */
+.closing-page { background:linear-gradient(135deg, rgba(0,229,195,0.04), rgba(124,111,247,0.06)); border:2px solid rgba(0,229,195,0.15); border-radius:20px; padding:40px 32px; margin:32px 0 24px; text-align:center; }
+.closing-inner { max-width:700px; margin:0 auto; }
+.closing-verdict { display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:16px; }
+.closing-icon { font-size:36px; }
+.closing-verdict h2 { font-size:28px; font-weight:800; letter-spacing:2px; }
+.closing-summary { font-size:14px; color:var(--c-muted); line-height:1.7; margin-bottom:28px; max-width:600px; margin-left:auto; margin-right:auto; }
+.closing-trio { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:32px; }
+.closing-item { background:var(--c-card); border:1px solid var(--c-border); border-radius:14px; padding:20px 16px; }
+.ci-action { border-color:rgba(0,229,195,0.3); background:rgba(0,229,195,0.04); }
+.ci-icon { font-size:22px; display:block; margin-bottom:8px; }
+.closing-item h4 { font-size:10px; font-weight:700; letter-spacing:1px; color:var(--c-dim); text-transform:uppercase; margin-bottom:8px; }
+.closing-item p { font-size:13px; color:var(--c-text); font-weight:600; line-height:1.4; }
+.closing-footer { padding-top:24px; border-top:1px solid var(--c-border); }
+.closing-brand { display:flex; align-items:center; justify-content:center; gap:8px; font-size:16px; font-weight:700; color:var(--c-accent); margin-bottom:6px; }
+.closing-logo { font-size:20px; }
+.closing-tagline { font-size:12px; color:var(--c-dim); font-style:italic; }
+
+/* ═══ REC TOP ROW ═══ */
+.rec-top-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+
+/* ═══ RESPONSIVE CONTEXT/CLOSING ═══ */
+@media (max-width:768px) { .ctx-grid { grid-template-columns:1fr; } .ctx-stats { flex-direction:row; flex-wrap:wrap; } .closing-trio { grid-template-columns:1fr; } }
 
 /* ═══ PRINT ═══ */
 /* ═══ PRINT ═══ */
