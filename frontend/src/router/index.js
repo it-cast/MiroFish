@@ -13,6 +13,7 @@ import CompararView     from '../views/CompararView.vue'
 import PublicReportView  from '../views/PublicReportView.vue'
 import AgentProfileView from '../views/AgentProfileView.vue'
 import PostsTimelineView from '../views/PostsTimelineView.vue'
+import DemoReportView from '../views/DemoReportView.vue'
 
 const routes = [
   {
