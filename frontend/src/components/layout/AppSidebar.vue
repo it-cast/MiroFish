@@ -131,6 +131,12 @@ watch(() => route.path, () => { carregarDados() })
         </svg>
         <span>Comparar</span>
       </div>
+      <div class="footer-link" @click="router.push('/agentes-biblioteca')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="13" height="13">
+          <circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/>
+        </svg>
+        <span>Agentes</span>
+      </div>
       <div class="footer-workspace">Workspace</div>
     </div>
 
