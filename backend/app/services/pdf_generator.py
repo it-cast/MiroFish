@@ -16,6 +16,7 @@ try:
     from fpdf import FPDF
     HAS_FPDF = True
 except ImportError:
+    FPDF = object
     HAS_FPDF = False
     logger.warning("fpdf2 não instalado. PDF profissional indisponível. Instale com: pip install fpdf2")
 
