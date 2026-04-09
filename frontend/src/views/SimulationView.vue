@@ -31,20 +31,99 @@ const abortado    = ref(false)
 let pollTimer     = null
 
 // ─── Seleção de Agentes ───────────────────────────────────────
-const entityTypes = ref([])          // Tipos de entidade do ontology
+const entityTypes = ref([])          // Tipos de entidade do ontology (auto-detectados)
 const selectedTypes = ref([])        // Tipos selecionados pelo usuário
-const customAgents = ref([])         // Agentes customizados adicionados
+const customAgents = ref([])         // Agentes adicionados da biblioteca
 const showAgentSelection = ref(false)
-const novoAgente = ref('')           // Input para adicionar agente custom
+const novoAgente = ref('')
+const activeCategory = ref(null)     // Categoria expandida
 
-const REGULADORES_BR = [
-  { name: 'PROCON', desc: 'Órgão de defesa do consumidor' },
-  { name: 'ANVISA', desc: 'Agência de vigilância sanitária' },
-  { name: 'BACEN', desc: 'Banco Central do Brasil' },
-  { name: 'INMETRO', desc: 'Instituto de metrologia' },
-  { name: 'IBAMA', desc: 'Instituto do meio ambiente' },
-  { name: 'CADE', desc: 'Conselho administrativo de defesa econômica' },
+// ─── Biblioteca de Agentes por Categoria ──────────────────────
+const AGENT_LIBRARY = [
+  { id: 'consumidores', icon: '🛒', label: 'Consumidores', color: '#00e5c3', agents: [
+    { name: 'Jovem Urbano (18-25)', desc: 'Digital native, compra por impulso, influenciado por redes sociais', tags: ['varejo','tech','moda'] },
+    { name: 'Mãe com Filhos', desc: 'Prioriza qualidade e segurança, sensível a preço, busca praticidade', tags: ['varejo','alimentação','saúde'] },
+    { name: 'Idoso Tradicional (60+)', desc: 'Fiel a marcas, prefere atendimento presencial, resistente a mudanças', tags: ['varejo','saúde','financeiro'] },
+    { name: 'Profissional Classe A', desc: 'Alto poder aquisitivo, valoriza exclusividade e experiência premium', tags: ['luxo','tech','serviços'] },
+    { name: 'Consumidor Classe C', desc: 'Sensível a preço, busca parcelamento, compara muito antes de comprar', tags: ['varejo','financeiro'] },
+    { name: 'Empreendedor PME', desc: 'Busca custo-benefício, decide rápido, precisa de ROI claro', tags: ['b2b','tech','serviços'] },
+    { name: 'Consumidor Digital', desc: 'Compra 100% online, compara em marketplaces, valoriza frete grátis', tags: ['ecommerce','tech'] },
+    { name: 'Consumidor Local', desc: 'Prefere comércio do bairro, valoriza relacionamento e confiança', tags: ['varejo','alimentação'] },
+  ]},
+  { id: 'reguladores', icon: '🏛', label: 'Reguladores & Governo', color: '#7c6ff7', agents: [
+    { name: 'PROCON', desc: 'Defesa do consumidor — fiscaliza práticas abusivas, propaganda enganosa', tags: ['todos'] },
+    { name: 'ANVISA', desc: 'Vigilância sanitária — regulamenta alimentos, cosméticos, medicamentos', tags: ['saúde','alimentação'] },
+    { name: 'BACEN', desc: 'Banco Central — regula serviços financeiros, fintechs, meios de pagamento', tags: ['financeiro','fintech'] },
+    { name: 'INMETRO', desc: 'Metrologia — certifica qualidade e segurança de produtos', tags: ['varejo','indústria'] },
+    { name: 'IBAMA', desc: 'Meio ambiente — fiscaliza impacto ambiental e sustentabilidade', tags: ['indústria','agro'] },
+    { name: 'CADE', desc: 'Defesa econômica — combate monopólio e práticas anticompetitivas', tags: ['todos'] },
+    { name: 'ANATEL', desc: 'Telecomunicações — regula internet, telefonia, dados', tags: ['tech','telecom'] },
+    { name: 'CVM', desc: 'Valores mobiliários — regula investimentos, tokens, crowdfunding', tags: ['financeiro','crypto'] },
+    { name: 'LGPD/ANPD', desc: 'Proteção de dados pessoais — fiscaliza uso de dados do consumidor', tags: ['tech','todos'] },
+  ]},
+  { id: 'financeiro', icon: '💰', label: 'Mercado Financeiro', color: '#f5a623', agents: [
+    { name: 'Banco Tradicional', desc: 'Conservador, burocrático, grande base de clientes, crédito restritivo', tags: ['financeiro'] },
+    { name: 'Fintech', desc: 'Ágil, digital first, taxas baixas, experiência moderna', tags: ['financeiro','tech'] },
+    { name: 'Investidor Anjo', desc: 'Busca oportunidades early-stage, avalia equipe e mercado', tags: ['startup'] },
+    { name: 'Analista de Mercado', desc: 'Avalia riscos e oportunidades com dados, visão macro', tags: ['financeiro'] },
+    { name: 'Consultor Financeiro', desc: 'Orienta clientes sobre investimentos e planejamento', tags: ['financeiro','serviços'] },
+    { name: 'Operadora de Crédito', desc: 'Crediário, BNPL, parcelamento — sensível a inadimplência', tags: ['varejo','financeiro'] },
+  ]},
+  { id: 'influenciadores', icon: '📱', label: 'Influenciadores & Mídia', color: '#e91e9c', agents: [
+    { name: 'Influenciador Digital Local', desc: 'Micro-influencer da cidade, alta credibilidade local, 5k-50k seguidores', tags: ['todos'] },
+    { name: 'Creator de Nicho', desc: 'Especialista no tema, audiência engajada, review detalhado', tags: ['todos'] },
+    { name: 'Jornalista/Blogueiro', desc: 'Cobertura editorial, busca fatos e novidades, amplifica narrativa', tags: ['todos'] },
+    { name: 'Influenciador Nacional', desc: 'Grande alcance, 500k+ seguidores, alto custo, impacto massivo', tags: ['moda','tech','lifestyle'] },
+    { name: 'Podcaster', desc: 'Formato longo, audiência fiel, análise profunda', tags: ['tech','negócios'] },
+    { name: 'TikToker/Reels', desc: 'Conteúdo curto e viral, público jovem, tendências rápidas', tags: ['moda','varejo','alimentação'] },
+  ]},
+  { id: 'concorrentes', icon: '🏪', label: 'Concorrentes & Mercado', color: '#ff5a5a', agents: [
+    { name: 'Líder de Mercado', desc: 'Marca dominante no setor, alto market share, define tendências', tags: ['todos'] },
+    { name: 'Novo Entrante', desc: 'Startup ou empresa entrando no mercado, agressiva em preço', tags: ['todos'] },
+    { name: 'Marketplace/E-commerce', desc: 'Shopee, Mercado Livre, Amazon — concorrência de preço e conveniência', tags: ['varejo','ecommerce'] },
+    { name: 'Concorrente Regional', desc: 'Forte na região, conhece o público local, relacionamento sólido', tags: ['varejo'] },
+    { name: 'Franquia Nacional', desc: 'Marca conhecida, padronização, poder de marketing', tags: ['varejo','alimentação'] },
+  ]},
+  { id: 'industria', icon: '🏭', label: 'Indústria & Fornecedores', color: '#4caf50', agents: [
+    { name: 'Fabricante/Fornecedor', desc: 'Produz o que você vende, define preço de custo e prazos', tags: ['varejo','indústria'] },
+    { name: 'Distribuidor/Atacadista', desc: 'Intermedia entre fábrica e varejo, logística e volume', tags: ['varejo'] },
+    { name: 'Representante Comercial', desc: 'Vende para lojistas, conhece o mercado e as dores', tags: ['varejo','b2b'] },
+    { name: 'Operador Logístico', desc: 'Entrega, frete, última milha — custo e prazo impactam tudo', tags: ['ecommerce','varejo'] },
+  ]},
+  { id: 'servicos', icon: '🔧', label: 'Serviços & Tech', color: '#1da1f2', agents: [
+    { name: 'Cliente de Delivery', desc: 'Pede por app, sensível a tempo e preço de entrega', tags: ['delivery','alimentação'] },
+    { name: 'Restaurante Parceiro', desc: 'Depende de plataformas, margem apertada, busca volume', tags: ['delivery','alimentação'] },
+    { name: 'Entregador', desc: 'Gig economy, sensível a taxa por entrega, flexibilidade', tags: ['delivery'] },
+    { name: 'Desenvolvedor/Tech', desc: 'Avalia produto pela tecnologia, API, integração', tags: ['tech','saas'] },
+    { name: 'Usuário SaaS B2B', desc: 'Empresa que compra software, precisa de ROI e suporte', tags: ['tech','saas','b2b'] },
+  ]},
+  { id: 'institucional', icon: '🏢', label: 'Institucional & Social', color: '#795548', agents: [
+    { name: 'Associação Comercial', desc: 'Representa o comércio local, advocacy, networking', tags: ['varejo'] },
+    { name: 'Sindicato/Classe', desc: 'Representa trabalhadores, negocia direitos, influência política', tags: ['indústria','serviços'] },
+    { name: 'Universidade/Pesquisador', desc: 'Análise acadêmica, dados de pesquisa, credibilidade técnica', tags: ['todos'] },
+    { name: 'ONG/Instituto Social', desc: 'Causa social, sustentabilidade, impacto comunitário', tags: ['todos'] },
+    { name: 'Reclame Aqui', desc: 'Plataforma de reclamações — reputação e resolução pública', tags: ['todos'] },
+    { name: 'SEBRAE', desc: 'Apoio a pequenas empresas — capacitação, crédito, mentoria', tags: ['pme','varejo'] },
+  ]},
 ]
+
+// Contar agentes selecionados por categoria
+const agentCounts = computed(() => {
+  const counts = {}
+  AGENT_LIBRARY.forEach(cat => { counts[cat.id] = 0 })
+  customAgents.value.forEach(a => {
+    if (a.categoryId) counts[a.categoryId] = (counts[a.categoryId] || 0) + 1
+  })
+  return counts
+})
+
+const totalSelecionados = computed(() => {
+  return entityTypes.value.filter(e => e.selected).length + customAgents.value.length
+})
+
+const autoCompleteCount = computed(() => {
+  return Math.max(0, cfgAgentes.value - totalSelecionados.value)
+})
 
 const maxRounds = computed(() => cfgRodadas.value)
 const maxAgents = computed(() => cfgAgentes.value)
@@ -351,10 +430,7 @@ async function prepareSimulation(simId, entityTypesFilter = null) {
 }
 
 function confirmarAgentes() {
-  // Coletar tipos selecionados + custom
-  const types = entityTypes.value
-    .filter(et => et.selected)
-    .map(et => et.name)
+  const types = entityTypes.value.filter(et => et.selected).map(et => et.name)
   const customs = customAgents.value.map(a => a.name)
   selectedTypes.value = [...types, ...customs]
   
@@ -368,21 +444,29 @@ function toggleEntityType(et) {
   et.selected = !et.selected
 }
 
+function toggleCategory(catId) {
+  activeCategory.value = activeCategory.value === catId ? null : catId
+}
+
+function addAgentFromLibrary(agent, categoryId) {
+  if (customAgents.value.some(a => a.name === agent.name)) return
+  customAgents.value.push({ ...agent, categoryId, custom: false })
+}
+
+function removeAgent(idx) {
+  customAgents.value.splice(idx, 1)
+}
+
+function isAgentAdded(agentName) {
+  return customAgents.value.some(a => a.name === agentName)
+}
+
 function adicionarAgente() {
   const nome = novoAgente.value.trim()
   if (!nome) return
   if (customAgents.value.some(a => a.name === nome)) return
-  customAgents.value.push({ name: nome, desc: 'Agente customizado', custom: true })
+  customAgents.value.push({ name: nome, desc: 'Agente personalizado', categoryId: 'custom', custom: true })
   novoAgente.value = ''
-}
-
-function adicionarRegulador(reg) {
-  if (customAgents.value.some(a => a.name === reg.name)) return
-  customAgents.value.push({ ...reg, custom: true })
-}
-
-function removerCustom(idx) {
-  customAgents.value.splice(idx, 1)
 }
 async function startSimulation(simId) {
   const res = await service.post('/api/simulation/start', {
@@ -519,59 +603,104 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 
       <!-- ═══ SELEÇÃO DE AGENTES ═══ -->
       <div v-if="showAgentSelection" class="agent-select-panel">
+        <!-- Header -->
         <div class="asp-header">
-          <h3>🎭 Selecione os Tipos de Agentes</h3>
-          <p>Escolha quais tipos de agentes participarão da simulação. O sistema criará agentes com perfis únicos para cada tipo selecionado.</p>
+          <div class="asp-title-row">
+            <h3>🎭 Monte seu Painel de Agentes</h3>
+            <div class="asp-counter" :class="{'asp-counter-full': totalSelecionados >= cfgAgentes}">
+              {{ totalSelecionados }} / {{ cfgAgentes }} agentes
+            </div>
+          </div>
+          <p>Selecione quem participará da simulação. O AUGUR criará personas únicas para cada tipo escolhido.</p>
         </div>
-        
-        <div class="asp-grid">
-          <div v-for="et in entityTypes" :key="et.name" 
-               class="asp-card" :class="{ 'asp-selected': et.selected }"
-               @click="toggleEntityType(et)">
-            <div class="asp-check">{{ et.selected ? '✅' : '⬜' }}</div>
-            <div class="asp-info">
-              <div class="asp-name">{{ et.name }}</div>
-              <div class="asp-desc">{{ et.description }}</div>
-              <div class="asp-examples" v-if="et.examples?.length">
-                Ex: {{ et.examples.slice(0, 2).join(', ') }}
+
+        <!-- Auto-detectados da hipótese -->
+        <div class="asp-section asp-detected" v-if="entityTypes.length">
+          <h4>🔍 Detectados na sua Hipótese</h4>
+          <p class="asp-section-sub">O AUGUR identificou estes participantes relevantes automaticamente</p>
+          <div class="asp-detected-grid">
+            <div v-for="et in entityTypes" :key="et.name" 
+                 class="asp-chip" :class="{ 'asp-chip-on': et.selected }"
+                 @click="toggleEntityType(et)">
+              <span class="asp-chip-check">{{ et.selected ? '✓' : '' }}</span>
+              <span class="asp-chip-name">{{ et.name }}</span>
+              <span class="asp-chip-badge">detectado</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Biblioteca por Categoria -->
+        <div class="asp-section">
+          <h4>📚 Biblioteca de Agentes</h4>
+          <p class="asp-section-sub">Adicione agentes de diferentes segmentos para enriquecer a simulação</p>
+          
+          <div class="asp-categories">
+            <div v-for="cat in AGENT_LIBRARY" :key="cat.id" class="asp-cat">
+              <!-- Category header (clickable) -->
+              <div class="asp-cat-header" @click="toggleCategory(cat.id)" :style="{'--cat-color': cat.color}">
+                <span class="asp-cat-icon">{{ cat.icon }}</span>
+                <span class="asp-cat-label">{{ cat.label }}</span>
+                <span class="asp-cat-count" v-if="agentCounts[cat.id]">{{ agentCounts[cat.id] }}</span>
+                <span class="asp-cat-arrow" :class="{'asp-cat-open': activeCategory === cat.id}">›</span>
+              </div>
+              
+              <!-- Agent list (expanded) -->
+              <div class="asp-cat-agents" v-if="activeCategory === cat.id">
+                <div v-for="agent in cat.agents" :key="agent.name" 
+                     class="asp-agent" :class="{ 'asp-agent-added': isAgentAdded(agent.name) }"
+                     @click="isAgentAdded(agent.name) ? null : addAgentFromLibrary(agent, cat.id)">
+                  <div class="asp-agent-left">
+                    <div class="asp-agent-dot" :style="{background: cat.color}"></div>
+                    <div>
+                      <div class="asp-agent-name">{{ agent.name }}</div>
+                      <div class="asp-agent-desc">{{ agent.desc }}</div>
+                    </div>
+                  </div>
+                  <button v-if="!isAgentAdded(agent.name)" class="asp-agent-add" :style="{color: cat.color}">+ Adicionar</button>
+                  <span v-else class="asp-agent-ok">✓ Adicionado</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
-        
-        <!-- Reguladores brasileiros -->
+
+        <!-- Agente personalizado -->
         <div class="asp-section">
-          <h4>🏛 Adicionar Reguladores Brasileiros</h4>
-          <div class="asp-regs">
-            <button v-for="reg in REGULADORES_BR" :key="reg.name" 
-                    class="asp-reg-btn"
-                    :class="{ 'asp-reg-added': customAgents.some(a => a.name === reg.name) }"
-                    @click="adicionarRegulador(reg)">
-              {{ reg.name }}
-            </button>
-          </div>
-        </div>
-        
-        <!-- Custom agent -->
-        <div class="asp-section">
-          <h4>➕ Adicionar Agente Personalizado</h4>
+          <h4>✍️ Agente Personalizado</h4>
           <div class="asp-custom-row">
-            <input v-model="novoAgente" placeholder="Nome do agente (ex: Influenciador Tech)" 
+            <input v-model="novoAgente" placeholder="Descreva o agente (ex: Dono de academia em cidade pequena)" 
                    class="asp-input" @keyup.enter="adicionarAgente()"/>
             <button class="asp-add-btn" @click="adicionarAgente()">Adicionar</button>
           </div>
-          <div v-if="customAgents.length" class="asp-custom-list">
-            <span v-for="(a, i) in customAgents" :key="i" class="asp-custom-tag">
-              {{ a.name }} <span class="asp-remove" @click="removerCustom(i)">✕</span>
+        </div>
+
+        <!-- Agentes selecionados -->
+        <div class="asp-section" v-if="customAgents.length">
+          <h4>Seus Agentes Selecionados</h4>
+          <div class="asp-selected-list">
+            <span v-for="(a, i) in customAgents" :key="i" class="asp-sel-tag" 
+                  :style="{'--tc': AGENT_LIBRARY.find(c => c.id === a.categoryId)?.color || '#00e5c3'}">
+              {{ a.name }}
+              <span class="asp-sel-x" @click="removeAgent(i)">✕</span>
             </span>
           </div>
         </div>
-        
+
+        <!-- Auto-complete info -->
+        <div class="asp-auto" v-if="autoCompleteCount > 0">
+          <span class="asp-auto-icon">🤖</span>
+          <span>O AUGUR escolherá <strong>{{ autoCompleteCount }} agentes adicionais</strong> automaticamente, baseado na sua hipótese e nos participantes mais relevantes para o cenário.</span>
+        </div>
+
+        <!-- Footer -->
         <div class="asp-footer">
-          <div class="asp-count">
-            {{ entityTypes.filter(e => e.selected).length + customAgents.length }} tipos selecionados
+          <div class="asp-footer-info">
+            <div class="asp-count-bar">
+              <div class="asp-count-fill" :style="{width: Math.min(100, (totalSelecionados / cfgAgentes) * 100) + '%'}"></div>
+            </div>
+            <span class="asp-count-text">{{ totalSelecionados }} selecionados · {{ autoCompleteCount }} auto-complete · {{ cfgAgentes }} total</span>
           </div>
-          <button class="asp-confirm" @click="confirmarAgentes()">
+          <button class="asp-confirm" @click="confirmarAgentes()" :disabled="totalSelecionados === 0 && entityTypes.length === 0">
             Confirmar e Gerar Agentes →
           </button>
         </div>
@@ -730,33 +859,76 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 .btn-retry:hover { opacity: .85; }
 
 /* ═══ AGENT SELECTION ═══ */
-.agent-select-panel { background:var(--bg-surface, #111118); border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:24px; margin-bottom:20px; }
-.asp-header h3 { font-size:18px; font-weight:700; color:#f0f0ff; margin-bottom:6px; }
-.asp-header p { font-size:13px; color:#8888aa; line-height:1.6; margin-bottom:16px; }
-.asp-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:10px; margin-bottom:20px; }
-.asp-card { display:flex; gap:10px; padding:12px; border:1px solid rgba(255,255,255,0.06); border-radius:10px; cursor:pointer; transition:all .2s; background:rgba(255,255,255,0.02); }
-.asp-card:hover { border-color:rgba(0,229,195,0.3); }
-.asp-selected { border-color:rgba(0,229,195,0.5); background:rgba(0,229,195,0.06); }
-.asp-check { font-size:16px; flex-shrink:0; }
-.asp-name { font-size:13px; font-weight:700; color:#f0f0ff; }
-.asp-desc { font-size:11px; color:#8888aa; margin-top:2px; }
-.asp-examples { font-size:10px; color:#555570; margin-top:4px; font-style:italic; }
-.asp-section { margin-top:16px; padding-top:16px; border-top:1px solid rgba(255,255,255,0.06); }
-.asp-section h4 { font-size:14px; font-weight:600; color:#f0f0ff; margin-bottom:10px; }
-.asp-regs { display:flex; flex-wrap:wrap; gap:6px; }
-.asp-reg-btn { padding:6px 14px; border-radius:20px; border:1px solid rgba(124,111,247,0.3); background:rgba(124,111,247,0.06); color:#7c6ff7; font-size:12px; font-weight:600; cursor:pointer; transition:all .2s; }
-.asp-reg-btn:hover { background:rgba(124,111,247,0.15); }
-.asp-reg-added { background:rgba(124,111,247,0.2); border-color:#7c6ff7; }
+.agent-select-panel { background:var(--bg-surface, #111118); border:1px solid rgba(255,255,255,0.08); border-radius:20px; padding:28px; margin-bottom:20px; }
+.asp-header { margin-bottom:20px; }
+.asp-title-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.asp-header h3 { font-size:20px; font-weight:700; color:#f0f0ff; }
+.asp-header p { font-size:13px; color:#8888aa; line-height:1.6; }
+.asp-counter { padding:6px 16px; border-radius:20px; font-size:13px; font-weight:700; background:rgba(0,229,195,0.08); color:#00e5c3; border:1px solid rgba(0,229,195,0.2); }
+.asp-counter-full { background:rgba(0,229,195,0.15); }
+.asp-section { margin-top:20px; padding-top:18px; border-top:1px solid rgba(255,255,255,0.06); }
+.asp-section h4 { font-size:15px; font-weight:700; color:#f0f0ff; margin-bottom:4px; }
+.asp-section-sub { font-size:12px; color:#555570; margin-bottom:12px; }
+
+/* Detected chips */
+.asp-detected { background:rgba(124,111,247,0.04); border-radius:14px; padding:18px; border-top:none; margin-top:0; }
+.asp-detected-grid { display:flex; flex-wrap:wrap; gap:8px; }
+.asp-chip { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:20px; border:1px solid rgba(124,111,247,0.25); background:rgba(124,111,247,0.06); cursor:pointer; transition:all .2s; }
+.asp-chip:hover { border-color:rgba(124,111,247,0.5); }
+.asp-chip-on { border-color:#7c6ff7; background:rgba(124,111,247,0.15); }
+.asp-chip-check { width:16px; height:16px; border-radius:50%; background:rgba(124,111,247,0.2); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; color:#7c6ff7; }
+.asp-chip-on .asp-chip-check { background:#7c6ff7; color:#fff; }
+.asp-chip-name { font-size:13px; font-weight:600; color:#f0f0ff; }
+.asp-chip-badge { font-size:9px; font-weight:700; color:#7c6ff7; background:rgba(124,111,247,0.1); padding:2px 8px; border-radius:10px; letter-spacing:0.5px; }
+
+/* Categories */
+.asp-categories { display:flex; flex-direction:column; gap:2px; }
+.asp-cat-header { display:flex; align-items:center; gap:10px; padding:12px 16px; border-radius:10px; cursor:pointer; transition:background .2s; }
+.asp-cat-header:hover { background:rgba(255,255,255,0.03); }
+.asp-cat-icon { font-size:20px; }
+.asp-cat-label { flex:1; font-size:14px; font-weight:600; color:#f0f0ff; }
+.asp-cat-count { background:var(--cat-color); color:#09090f; font-size:11px; font-weight:800; width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; }
+.asp-cat-arrow { font-size:18px; color:#555570; transition:transform .2s; font-weight:700; }
+.asp-cat-open { transform:rotate(90deg); }
+
+/* Agent list */
+.asp-cat-agents { padding:4px 0 8px 46px; display:flex; flex-direction:column; gap:4px; }
+.asp-agent { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-radius:10px; cursor:pointer; transition:all .15s; border:1px solid transparent; }
+.asp-agent:hover { background:rgba(255,255,255,0.03); border-color:rgba(255,255,255,0.06); }
+.asp-agent-added { opacity:0.6; cursor:default; }
+.asp-agent-left { display:flex; gap:10px; align-items:flex-start; flex:1; }
+.asp-agent-dot { width:8px; height:8px; border-radius:50%; margin-top:6px; flex-shrink:0; }
+.asp-agent-name { font-size:13px; font-weight:600; color:#f0f0ff; }
+.asp-agent-desc { font-size:11px; color:#8888aa; margin-top:2px; line-height:1.4; }
+.asp-agent-add { border:none; background:none; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; padding:4px 10px; border-radius:6px; transition:background .2s; }
+.asp-agent-add:hover { background:rgba(255,255,255,0.06); }
+.asp-agent-ok { font-size:11px; color:#00e5c3; font-weight:600; }
+
+/* Custom input */
 .asp-custom-row { display:flex; gap:8px; }
-.asp-input { flex:1; padding:8px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:#f0f0ff; font-size:13px; outline:none; }
+.asp-input { flex:1; padding:10px 16px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:#f0f0ff; font-size:13px; outline:none; }
 .asp-input:focus { border-color:rgba(0,229,195,0.4); }
-.asp-add-btn { padding:8px 18px; border-radius:8px; border:none; background:#00e5c3; color:#09090f; font-weight:700; font-size:12px; cursor:pointer; }
-.asp-custom-list { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
-.asp-custom-tag { display:inline-flex; align-items:center; gap:6px; padding:4px 12px; border-radius:20px; background:rgba(0,229,195,0.1); color:#00e5c3; font-size:12px; font-weight:600; }
-.asp-remove { cursor:pointer; opacity:0.6; font-size:10px; }
-.asp-remove:hover { opacity:1; }
-.asp-footer { display:flex; justify-content:space-between; align-items:center; margin-top:20px; padding-top:16px; border-top:1px solid rgba(255,255,255,0.06); }
-.asp-count { font-size:13px; color:#8888aa; font-weight:600; }
-.asp-confirm { padding:12px 28px; border-radius:10px; border:none; background:#00e5c3; color:#09090f; font-weight:700; font-size:14px; cursor:pointer; transition:transform .2s; }
-.asp-confirm:hover { transform:translateY(-2px); }
-</style>
+.asp-add-btn { padding:10px 20px; border-radius:10px; border:none; background:#00e5c3; color:#09090f; font-weight:700; font-size:12px; cursor:pointer; white-space:nowrap; }
+
+/* Selected tags */
+.asp-selected-list { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.asp-sel-tag { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:20px; background:rgba(255,255,255,0.04); border:1px solid var(--tc); color:var(--tc); font-size:12px; font-weight:600; }
+.asp-sel-x { cursor:pointer; opacity:0.6; font-size:10px; }
+.asp-sel-x:hover { opacity:1; }
+
+/* Auto-complete */
+.asp-auto { display:flex; gap:12px; align-items:flex-start; padding:14px 18px; background:rgba(0,229,195,0.04); border:1px solid rgba(0,229,195,0.15); border-radius:12px; margin-top:16px; font-size:12px; color:#8888aa; line-height:1.6; }
+.asp-auto strong { color:#00e5c3; }
+.asp-auto-icon { font-size:20px; flex-shrink:0; }
+
+/* Footer */
+.asp-footer { display:flex; justify-content:space-between; align-items:center; margin-top:20px; padding-top:18px; border-top:1px solid rgba(255,255,255,0.06); gap:16px; }
+.asp-footer-info { flex:1; }
+.asp-count-bar { height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden; margin-bottom:6px; }
+.asp-count-fill { height:100%; background:linear-gradient(90deg, #7c6ff7, #00e5c3); border-radius:3px; transition:width .3s; }
+.asp-count-text { font-size:11px; color:#555570; }
+.asp-confirm { padding:14px 32px; border-radius:12px; border:none; background:linear-gradient(135deg, #00e5c3, #7c6ff7); color:#fff; font-weight:700; font-size:14px; cursor:pointer; transition:transform .2s, box-shadow .2s; white-space:nowrap; }
+.asp-confirm:hover { transform:translateY(-2px); box-shadow:0 8px 25px rgba(0,229,195,0.3); }
+.asp-confirm:disabled { opacity:0.4; cursor:not-allowed; transform:none; }
+
+@media (max-width:768px) { .asp-cat-agents { padding-left:20px; } .asp-title-row { flex-direction:column; align-items:flex-start; gap:8px; } }</style>
