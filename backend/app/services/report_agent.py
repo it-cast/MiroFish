@@ -783,7 +783,7 @@ Sua tarefa é:
 ESCREVA 100% EM PORTUGUÊS DO BRASIL.
 - Dados em chinês das ferramentas → TRADUZA para PT-BR
 - Dados em inglês → TRADUZA para PT-BR  
-- NENHUM caractere chinês (汉字) permitido no output
+- NENHUM caractere em idioma diferente de portugues permitido no output
 - Citações de agentes DEVEM ser traduzidas
 - VIOLAÇÃO = RELATÓRIO INVÁLIDO
 
@@ -1032,7 +1032,7 @@ class ReportAgent:
         self.simulation_id = simulation_id
         self.simulation_requirement = simulation_requirement
         
-        self.llm = llm_client or LLMClient()
+        self.llm = llm_client or LLMClient(model='gpt-5.4')
         self.zep_tools = zep_tools or ZepToolsService()
         
         # Ferramenta
