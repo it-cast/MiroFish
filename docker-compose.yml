@@ -14,3 +14,4 @@ services:
       - ./backend/uploads:/app/backend/uploads
       - ./frontend/src:/app/frontend/src
       - ./frontend/index.html:/app/frontend/index.html
+      - ./backend/app:/app/backend/app:rw
