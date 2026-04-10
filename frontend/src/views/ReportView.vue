@@ -892,7 +892,17 @@ function abrirChat() {
         </div>
       </section>
 
-      <!-- ═══ CAMADA 1: DECISÃO EM 30 SEGUNDOS ═══ -->
+      <!-- ═══ TABS ═══ -->
+      <nav class="rpt-tabs">
+        <button class="rpt-tab" :class="{'rpt-tab-on': activeTab === 'decisao'}" @click="activeTab = 'decisao'">⚡ Decisão</button>
+        <button class="rpt-tab" :class="{'rpt-tab-on': activeTab === 'analise'}" @click="activeTab = 'analise'">📊 Análise</button>
+        <button class="rpt-tab" :class="{'rpt-tab-on': activeTab === 'estrategia'}" @click="activeTab = 'estrategia'">🎯 Estratégia</button>
+        <button class="rpt-tab" :class="{'rpt-tab-on': activeTab === 'profunda'}" @click="activeTab = 'profunda'">🔬 Profunda</button>
+      </nav>
+
+      <!-- ═══ TAB: DECISÃO ═══ -->
+      <div v-show="activeTab === 'decisao'">
+
       <div class="layer-label"><span class="ll-icon">⚡</span> Decisão em 30 segundos</div>
 
       <!-- ═══ 1. HERO: RESUMO EXECUTIVO ═══ -->
@@ -1017,8 +1027,12 @@ function abrirChat() {
         </div>
       </section>
 
-      <!-- ═══ CAMADA 2: ANÁLISE EXECUTIVA — 5 MINUTOS ═══ -->
-      <div class="layer-label"><span class="ll-icon">📊</span> Análise executiva — 5 minutos</div>
+      </div><!-- /tab decisao -->
+
+      <!-- ═══ TAB: ANÁLISE ═══ -->
+      <div v-show="activeTab === 'analise'">
+
+      <div class="layer-label"><span class="ll-icon">📊</span> Análise executiva</div>
 
       <!-- ═══ 5. CENÁRIOS FUTUROS ═══ -->
       <section class="rpt-section" v-if="cenarios.length">
@@ -1064,8 +1078,13 @@ function abrirChat() {
 
       <!-- ═══ 6b. ANÁLISE EMOCIONAL ═══ -->
       <section class="rpt-section" v-if="secEmocional?.content">
-        <div class="sec-header"><span class="sec-icon">🎭</span><h3>Análise Emocional</h3></div>
-        <div class="md-body" v-html="md(secEmocional.content)"></div>
+        <div class="sec-header sec-collapsible" @click="toggleSection('emocional')">
+          <span class="sec-icon">🎭</span><h3>Análise Emocional</h3>
+          <span class="sec-toggle">{{ isExpanded('emocional') ? '▾' : '▸' }}</span>
+        </div>
+        <div class="sec-collapse" :class="{'sec-open': isExpanded('emocional')}">
+          <div class="md-body" v-html="md(secEmocional.content)"></div>
+        </div>
       </section>
 
       <!-- ═══ 7. FATORES DE RISCO ═══ -->
@@ -1111,16 +1130,31 @@ function abrirChat() {
         <div v-else-if="secRecomendacoes?.content" class="md-body" v-html="md(secRecomendacoes.content)"></div>
       </section>
 
+      </div><!-- /tab analise -->
+
+      <!-- ═══ TAB: ESTRATÉGIA ═══ -->
+      <div v-show="activeTab === 'estrategia'">
+
       <!-- ═══ 8b. ESTRATÉGIA DE COMUNICAÇÃO ═══ -->
       <section class="rpt-section" v-if="secComunicacao?.content">
-        <div class="sec-header"><span class="sec-icon">📣</span><h3>Estratégia de Comunicação</h3></div>
-        <div class="md-body" v-html="md(secComunicacao.content)"></div>
+        <div class="sec-header sec-collapsible" @click="toggleSection('comm')">
+          <span class="sec-icon">📣</span><h3>Estratégia de Comunicação</h3>
+          <span class="sec-toggle">{{ isExpanded('comm') ? '▾' : '▸' }}</span>
+        </div>
+        <div class="sec-collapse" :class="{'sec-open': isExpanded('comm')}">
+          <div class="md-body" v-html="md(secComunicacao.content)"></div>
+        </div>
       </section>
 
       <!-- ═══ POSICIONAMENTO PERCEBIDO vs DESEJADO ═══ -->
       <section class="rpt-section" v-if="secPosicionamento?.content">
-        <div class="sec-header"><span class="sec-icon">🎯</span><h3>Posicionamento Percebido vs Desejado</h3></div>
-        <div class="md-body" v-html="md(secPosicionamento.content)"></div>
+        <div class="sec-header sec-collapsible" @click="toggleSection('posic')">
+          <span class="sec-icon">🎯</span><h3>Posicionamento Percebido vs Desejado</h3>
+          <span class="sec-toggle">{{ isExpanded('posic') ? '▾' : '▸' }}</span>
+        </div>
+        <div class="sec-collapse" :class="{'sec-open': isExpanded('posic')}">
+          <div class="md-body" v-html="md(secPosicionamento.content)"></div>
+        </div>
       </section>
 
       <!-- ═══ 9. PREVISÕES ═══ -->
@@ -1137,8 +1171,12 @@ function abrirChat() {
         <div v-else-if="secPrevisoes?.content" class="md-body" v-html="md(secPrevisoes.content)"></div>
       </section>
 
-      <!-- ═══ CAMADA 3: ANÁLISE PROFUNDA — 30 MINUTOS ═══ -->
-      <div class="layer-label"><span class="ll-icon">🔬</span> Análise profunda — 30 minutos</div>
+      </div><!-- /tab estrategia -->
+
+      <!-- ═══ TAB: PROFUNDA ═══ -->
+      <div v-show="activeTab === 'profunda'">
+
+      <div class="layer-label"><span class="ll-icon">🔬</span> Análise profunda</div>
 
       <!-- ═══ 10. ANÁLISE PROFUNDA ═══ -->
       <section class="rpt-section" v-if="deepSections.length">
@@ -1179,11 +1217,18 @@ function abrirChat() {
 
       <!-- ═══ VALOR DA ANÁLISE ═══ -->
       <section class="rpt-section valor-section" v-if="secValorAnalise?.content">
-        <div class="sec-header"><span class="sec-icon">💎</span><h3>Valor da Análise</h3></div>
-        <div class="md-body" v-html="md(secValorAnalise.content)"></div>
+        <div class="sec-header sec-collapsible" @click="toggleSection('valor')">
+          <span class="sec-icon">💎</span><h3>Valor da Análise</h3>
+          <span class="sec-toggle">{{ isExpanded('valor') ? '▾' : '▸' }}</span>
+        </div>
+        <div class="sec-collapse" :class="{'sec-open': isExpanded('valor')}">
+          <div class="md-body" v-html="md(secValorAnalise.content)"></div>
+        </div>
       </section>
 
-      <!-- ═══ SEÇÃO DE FECHAMENTO ═══ -->
+      </div><!-- /tab profunda -->
+
+      <!-- ═══ SEÇÃO DE FECHAMENTO (always visible) ═══ -->
       <section class="closing-page">
         <div class="closing-inner">
           <div class="closing-verdict" :style="{color: veredicto.color}">
@@ -1428,6 +1473,21 @@ function abrirChat() {
 
 /* ═══ VALOR DA ANÁLISE ═══ */
 .valor-section { background:linear-gradient(135deg, rgba(245,166,35,0.04), rgba(0,229,195,0.03)) !important; border-color:rgba(245,166,35,0.2) !important; }
+
+/* ═══ TABS ═══ */
+.rpt-tabs { display:flex; gap:4px; background:var(--c-card); border:1px solid var(--c-border); border-radius:14px; padding:4px; margin-bottom:24px; position:sticky; top:0; z-index:10; }
+.rpt-tab { flex:1; padding:12px 16px; border:none; background:none; border-radius:10px; font-size:13px; font-weight:600; color:var(--c-muted); cursor:pointer; transition:all .2s; white-space:nowrap; }
+.rpt-tab:hover { background:rgba(255,255,255,0.04); color:var(--c-text); }
+.rpt-tab-on { background:var(--c-accent) !important; color:#09090f !important; box-shadow:0 2px 8px rgba(0,229,195,0.25); }
+
+/* ═══ COLLAPSIBLE ═══ */
+.sec-collapsible { cursor:pointer; user-select:none; }
+.sec-collapsible:hover { opacity:0.85; }
+.sec-toggle { font-size:14px; color:var(--c-dim); margin-left:auto; }
+.sec-collapse { max-height:200px; overflow:hidden; position:relative; transition:max-height .4s ease; }
+.sec-collapse::after { content:''; position:absolute; bottom:0; left:0; right:0; height:60px; background:linear-gradient(transparent, var(--c-surface, #111118)); pointer-events:none; }
+.sec-collapse.sec-open { max-height:none; overflow:visible; }
+.sec-collapse.sec-open::after { display:none; }
 
 /* ═══ CONTEXT PAGE ═══ */
 .ctx-page { background:linear-gradient(135deg, rgba(124,111,247,0.06), rgba(0,229,195,0.04)); border:1px solid rgba(124,111,247,0.15); border-radius:20px; padding:32px; margin-bottom:24px; }
