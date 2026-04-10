@@ -1,11 +1,10 @@
 """
-MiroFish Backend - Flask
+AUGUR Backend - Flask
 """
 
 import os
 import warnings
 
-# multiprocessing resource_tracker  transformers
 warnings.filterwarnings("ignore", message=".*resource_tracker.*")
 
 from flask import Flask, request
@@ -16,17 +15,15 @@ from .utils.logger import setup_logger, get_logger
 
 
 def create_app(config_class=Config):
-    """Flask"""
+    """Flask app factory"""
     app = Flask(__name__)
     app.config.from_object(config_class)
     
-    # JSON \uXXXX
     if hasattr(app, 'json') and hasattr(app.json, 'ensure_ascii'):
         app.json.ensure_ascii = False
     
     logger = setup_logger('mirofish')
     
-    # reloader  debug
     is_reloader_process = os.environ.get('WERKZEUG_RUN_MAIN') == 'true'
     debug_mode = app.config.get('DEBUG', False)
     should_log_startup = not debug_mode or is_reloader_process
@@ -37,29 +34,28 @@ def create_app(config_class=Config):
         logger.info("=" * 50)
     
     # CORS
-    # CORS — usar dominio especifico em producao
     cors_origins = os.environ.get('CORS_ORIGINS', '*').split(',')
     CORS(app, resources={r"/api/*": {"origins": cors_origins}})
     
-    # ═══ JWT Auth (opcional — não quebra se flask-jwt-extended não estiver instalado) ═══
+    # JWT Auth (opcional)
     try:
         from .auth import init_jwt, auth_bp
         jwt = init_jwt(app)
         app.register_blueprint(auth_bp)
         if should_log_startup:
             if jwt:
-                logger.info("JWT Auth configurado ✅")
+                logger.info("JWT Auth configurado")
             else:
-                logger.info("JWT Auth não disponível (flask-jwt-extended não instalado)")
+                logger.info("JWT Auth nao disponivel (flask-jwt-extended nao instalado)")
     except Exception as e:
         if should_log_startup:
-            logger.warning(f"Auth não carregado: {e}")
+            logger.warning(f"Auth nao carregado: {e}")
     
-    # SimulaçãoSimulação
+    # Simulation Runner
     from .services.simulation_runner import SimulationRunner
     SimulationRunner.register_cleanup()
     if should_log_startup:
-        logger.info("Simulação")
+        logger.info("Simulacao")
     
     @app.before_request
     def log_request():
@@ -74,20 +70,30 @@ def create_app(config_class=Config):
         logger.debug(f": {response.status_code}")
         return response
     
+    # Blueprints principais
     from .api import graph_bp, simulation_bp, report_bp, analytics_bp
     from .api.public import public_bp
     app.register_blueprint(graph_bp, url_prefix='/api/graph')
     app.register_blueprint(simulation_bp, url_prefix='/api/simulation')
-    app.register_blueprint(share_bp)
     app.register_blueprint(report_bp, url_prefix='/api/report')
     app.register_blueprint(analytics_bp, url_prefix='/api/analytics')
     app.register_blueprint(public_bp, url_prefix='/api/public')
+
+    # Share API (opcional)
+    try:
+        from .api.share import share_bp
+        app.register_blueprint(share_bp)
+        if should_log_startup:
+            logger.info("Share API disponivel")
+    except Exception as e:
+        if should_log_startup:
+            logger.warning(f"Share API nao disponivel: {e}")
     
     @app.route('/health')
     def health():
         return {'status': 'ok', 'service': 'MiroFish Backend'}
     
     if should_log_startup:
-        logger.info("MiroFish Backend ")
+        logger.info("MiroFish Backend pronto")
     
     return app
