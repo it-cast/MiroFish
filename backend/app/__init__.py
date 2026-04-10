@@ -37,7 +37,9 @@ def create_app(config_class=Config):
         logger.info("=" * 50)
     
     # CORS
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    # CORS — usar dominio especifico em producao
+    cors_origins = os.environ.get('CORS_ORIGINS', '*').split(',')
+    CORS(app, resources={r"/api/*": {"origins": cors_origins}})
     
     # ═══ JWT Auth (opcional — não quebra se flask-jwt-extended não estiver instalado) ═══
     try:
