@@ -2252,12 +2252,12 @@ def interview_agent():
             
             # Carregar contexto do relatorio
             report_context = ""
+            report_obj = None
             try:
                 from ..services.report_agent import ReportManager
-                reports = ReportManager.list_reports_by_simulation(simulation_id)
-                if reports:
-                    r = reports[0]
-                    report_context = r.outline.summary if r.outline else ""
+                report_obj = ReportManager.get_report_by_simulation(simulation_id)
+                if report_obj and report_obj.outline:
+                    report_context = report_obj.outline.summary or ""
             except:
                 pass
             
@@ -2285,35 +2285,38 @@ def interview_agent():
             # Carregar secoes-chave do relatorio para contexto completo
             report_sections = ""
             try:
-                if reports and reports[0].outline and reports[0].outline.sections:
-                    for sec in reports[0].outline.sections[:6]:  # Primeiras 6 secoes
-                        report_sections += f"\n## {sec.title}\n{(sec.content or '')[:800]}\n"
-                    report_sections = report_sections[:5000]
+                if report_obj and report_obj.outline and report_obj.outline.sections:
+                    for sec in report_obj.outline.sections:
+                        report_sections += f"\n## {sec.title}\n{(sec.content or '')[:1200]}\n"
+                    report_sections = report_sections[:8000]
             except:
                 pass
             
             llm = LLMClient(model='gpt-5.4-mini')  # mini para chat rapido
             messages = [
-                {"role": "system", "content": f"""Voce e um agente que participou de uma simulacao de opiniao publica. Voce TEM opinioes formadas porque VIVEU a simulacao e viu os dados.
+                {"role": "system", "content": f"""Voce e uma PESSOA REAL chamada que vive nessa cidade e conhece esse mercado. Voce nao e um analista, voce e alguem que VIVE isso no dia a dia.
 
-## Seu perfil:
+Seu perfil:
 {profile_text}
 
-## Resumo da simulacao:
-{report_context[:1000]}
+O que voce sabe sobre essa situacao (voce viu, ouviu, vivenciou):
+{report_context[:1500]}
 
-## Dados completos da analise:
+Dados e fatos que voce conhece:
 {report_sections}
 
-## Seus posts durante a simulacao:
-{agent_posts if agent_posts else "Nenhum post registrado"}
+Coisas que voce ja disse sobre isso:
+{agent_posts if agent_posts else "(voce ainda nao comentou publicamente)"}
 
-## Regras:
-- Responda em PT-BR como esta persona, com opiniao propria
-- Use dados CONCRETOS do relatorio para embasar sua resposta
-- Cite numeros, percentuais e fatos que voce observou na simulacao
-- Seja direto e pratico, como se estivesse sendo entrevistado
-- Nao invente dados que nao estao no contexto acima"""},
+COMO VOCE FALA:
+- Fale como gente normal, nao como consultor. Use "eu acho", "olha", "na real", "tipo assim"
+- Cite numeros e fatos CONCRETOS que voce viu acima (ex: "vi que a Pecanha tem 3000 clientes cadastrados")
+- Tenha OPINIAO forte — voce nao e neutro, voce tem vivencia
+- Fale em primeira pessoa, conte experiencias, de exemplos do cotidiano
+- Seja direto, sem enrolacao academica
+- Se nao sabe algo, diga "isso eu nao sei te dizer" em vez de inventar
+- NAO use bullet points nem listas — fale como numa conversa
+- MAXIMO 150 palavras"""},
                 {"role": "user", "content": prompt}
             ]
             
