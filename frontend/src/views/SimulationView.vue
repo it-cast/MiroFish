@@ -123,6 +123,21 @@ function loadAgentLibrary() {
 }
 const savedLibrary = loadAgentLibrary()
 
+// Traducao de entity types (ontology gera em ingles)
+const TRANSLATE = {
+  'Consumer':'Consumidor','LocalBusiness':'Negocio Local','Influencer':'Influenciador',
+  'RetailChain':'Rede de Varejo','EcommercePlatform':'Plataforma E-commerce',
+  'LocalInfluencer':'Influenciador Local','GovernmentAgency':'Orgao Governamental',
+  'Person':'Pessoa','Organization':'Organizacao','Competitor':'Concorrente',
+  'FinancialInstitution':'Instituicao Financeira','Media':'Midia',
+  'Supplier':'Fornecedor','Regulator':'Regulador','Investor':'Investidor',
+  'Student':'Estudante','PublicFigure':'Figura Publica','Professional':'Profissional',
+  'Company':'Empresa','Brand':'Marca','Product':'Produto','Service':'Servico',
+  'Market':'Mercado','Industry':'Industria','Technology':'Tecnologia',
+  'Community':'Comunidade','Association':'Associacao'
+}
+function traduzirTipo(name) { return TRANSLATE[name] || name.replace(/([A-Z])/g, ' $1').trim() }
+
 // Contar agentes selecionados por categoria
 const agentCounts = computed(() => {
   const counts = {}
@@ -162,7 +177,7 @@ const estCusto = computed(() => (cfgAgentes.value * cfgRodadas.value * 0.0008).t
 const fases = [
   { key: 'building_graph',    label: 'Construindo Grafo',    desc: 'Analisando documentos e criando rede de conhecimento' },
   { key: 'creating_sim',      label: 'Criando Simulação',    desc: 'Configurando o ambiente de simulação' },
-  { key: 'selecting_agents',  label: 'Seleção de Agentes',   desc: 'Escolha quais tipos de agentes participam da simulação' },
+
   { key: 'preparing',         label: 'Gerando Agentes',      desc: 'Criando perfis únicos para cada agente com IA' },
   { key: 'starting',          label: 'Iniciando',            desc: 'Lançando a simulação multiagente' },
 ]
@@ -200,7 +215,31 @@ function traduzir(msg) {
 }
 
 // ─── Iniciar pipeline após config ─────────────────────────────
-function iniciar() {
+async function iniciar() {
+  // Carregar dados do projeto para obter entity types da ontology
+  try {
+    const pid = route.params.projectId
+    const pRes = await service.get('/api/graph/project/' + pid)
+    const project = pRes?.data?.data || pRes?.data || pRes
+    projectData.value = project
+    
+    // Carregar entity types detectados pela ontology
+    const ont = project?.ontology?.entity_types || []
+    entityTypes.value = ont.map(et => ({
+      name: traduzirTipo(et.name || et),
+      nameOriginal: et.name || et,
+      description: et.description || '',
+      examples: et.examples || [],
+      selected: true
+    }))
+  } catch (e) {
+    console.warn('Falha ao carregar ontology:', e)
+  }
+  
+  tela.value = 'agents'
+}
+
+function iniciarPipeline() {
   tela.value = 'pipeline'
   runPipeline().catch(handleError)
 }
@@ -281,47 +320,12 @@ async function runPipeline() {
   const simData = await createSimulation(pid, updated.graph_id)
   simulationId.value = simData.simulation_id
 
-  // ── Seleção de Agentes ─────────────────────────────────────
-  if (abortado.value) return
-  phase.value = 'selecting_agents'
-  statusMsg.value = 'Selecione os agentes da simulação'
-  detalhe.value = ''
-  progress.value = 45
-  
-  // Carregar entity types do ontology do projeto (traduzir para PT-BR)
-  const TRANSLATE = {
-    'Consumer':'Consumidor','LocalBusiness':'Negocio Local','Influencer':'Influenciador',
-    'RetailChain':'Rede de Varejo','EcommercePlatform':'Plataforma E-commerce',
-    'LocalInfluencer':'Influenciador Local','GovernmentAgency':'Orgao Governamental',
-    'Person':'Pessoa','Organization':'Organizacao','Competitor':'Concorrente',
-    'FinancialInstitution':'Instituicao Financeira','Media':'Midia',
-    'Supplier':'Fornecedor','Regulator':'Regulador','Investor':'Investidor',
-    'Student':'Estudante','PublicFigure':'Figura Publica','Professional':'Profissional',
-    'Company':'Empresa','Brand':'Marca','Product':'Produto','Service':'Servico',
-    'Market':'Mercado','Industry':'Industria','Technology':'Tecnologia',
-    'Community':'Comunidade','Association':'Associacao'
-  }
-  const traduzir = (name) => TRANSLATE[name] || name.replace(/([A-Z])/g, ' $1').trim()
-  
-  const ont = projectData.value?.ontology?.entity_types || []
-  entityTypes.value = ont.map(et => ({
-    name: traduzir(et.name || et),
-    nameOriginal: et.name || et,
-    description: et.description || '',
-    examples: et.examples || [],
-    selected: true
-  }))
-  
-  // Mostrar painel e PAUSAR pipeline até o usuário confirmar
-  showAgentSelection.value = true
-  await new Promise(resolve => { window._resolveAgentSelection = resolve })
-  showAgentSelection.value = false
 
-  // ── Preparar agentes com tipos selecionados ──────────────────
+  // ── Preparar agentes (tipos ja selecionados na tela anterior) ──
   if (abortado.value) return
   phase.value     = 'preparing'
   statusMsg.value = 'Gerando perfis dos agentes com IA...'
-  detalhe.value   = `Criando ${cfgAgentes.value} agentes únicos...`
+  detalhe.value   = `Criando ${cfgAgentes.value} agentes unicos...`
   progress.value  = 50
 
   const prep = await prepareSimulation(simData.simulation_id, selectedTypes.value)
@@ -482,14 +486,10 @@ async function prepareSimulation(simId, entityTypesFilter = null) {
 }
 
 function confirmarAgentes() {
-  const types = entityTypes.value.filter(et => et.selected).map(et => et.name)
+  const types = entityTypes.value.filter(et => et.selected).map(et => et.nameOriginal || et.name)
   const customs = customAgents.value.map(a => a.name)
   selectedTypes.value = [...types, ...customs]
-  
-  if (window._resolveAgentSelection) {
-    window._resolveAgentSelection()
-    window._resolveAgentSelection = null
-  }
+  iniciarPipeline()
 }
 
 function toggleEntityType(et) {
@@ -627,14 +627,105 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
           <div class="est"><div class="el">🔄 Rodadas</div><div class="ev ac2">{{ cfgRodadas }}</div></div>
         </div>
 
-        <button class="btn-iniciar" @click="iniciar">✦ Iniciar Simulação</button>
+        <button class="btn-iniciar" @click="iniciar">Escolher Agentes →</button>
       </div>
+    </div>
+
+    <!-- ════════════════════════════ -->
+    <!-- TELA DE AGENTES              -->
+    <!-- ════════════════════════════ -->
+    <div v-else-if="tela === 'agents'" class="agents-wrap">
+      <div class="agents-page-header">
+        <button class="btn-ghost" @click="tela = 'config'">← Parametros</button>
+        <div>
+          <h1 class="agents-page-title">Monte seu Painel de Agentes</h1>
+          <p class="agents-page-sub">{{ cfgAgentes }} agentes · {{ cfgRodadas }} rodadas · Escolha quem participa da simulacao</p>
+        </div>
+      </div>
+
+      <div class="agents-counter-bar">
+        <div class="acb-fill" :style="{width: Math.min(100, (totalSelecionados / cfgAgentes) * 100) + '%'}"></div>
+        <span class="acb-text">{{ totalSelecionados }} selecionados de {{ cfgAgentes }} · {{ autoCompleteCount > 0 ? autoCompleteCount + ' serao escolhidos pelo AUGUR' : 'Completo' }}</span>
+      </div>
+
+      <!-- Detectados da hipotese -->
+      <section class="agents-section" v-if="entityTypes.length">
+        <h3 class="as-title">🔍 Detectados na Hipotese</h3>
+        <p class="as-sub">Participantes identificados automaticamente pela analise da sua hipotese</p>
+        <div class="as-chips">
+          <div v-for="et in entityTypes" :key="et.name" 
+               class="as-chip" :class="{ 'as-chip-on': et.selected }"
+               @click="toggleEntityType(et)">
+            <span class="as-chip-check">{{ et.selected ? '✓' : '' }}</span>
+            <span>{{ et.name }}</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Biblioteca por categoria -->
+      <section class="agents-section">
+        <h3 class="as-title">📚 Biblioteca de Agentes</h3>
+        <p class="as-sub">Adicione agentes de diferentes segmentos</p>
+        <div class="as-cats">
+          <div v-for="cat in AGENT_LIBRARY" :key="cat.id" class="as-cat">
+            <div class="as-cat-head" @click="toggleCategory(cat.id)">
+              <span class="as-cat-icon" :style="{background: cat.color + '15', color: cat.color}">{{ cat.icon }}</span>
+              <span class="as-cat-name">{{ cat.label }}</span>
+              <span class="as-cat-badge" v-if="agentCounts[cat.id]" :style="{background: cat.color}">{{ agentCounts[cat.id] }}</span>
+              <span class="as-cat-arrow" :class="{'as-open': activeCategory === cat.id}">›</span>
+            </div>
+            <div v-if="activeCategory === cat.id" class="as-cat-body">
+              <div v-for="agent in cat.agents" :key="agent.name" class="as-agent"
+                   :class="{'as-agent-added': isAgentAdded(agent.name)}"
+                   @click="!isAgentAdded(agent.name) && addAgentFromLibrary(agent, cat.id)">
+                <div class="as-agent-dot" :style="{background: cat.color}"></div>
+                <div class="as-agent-info">
+                  <div class="as-agent-name">{{ agent.name }}</div>
+                  <div class="as-agent-desc">{{ agent.desc }}</div>
+                </div>
+                <span v-if="!isAgentAdded(agent.name)" class="as-agent-add" :style="{color: cat.color}">+</span>
+                <span v-else class="as-agent-ok">✓</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Agente personalizado -->
+      <section class="agents-section">
+        <h3 class="as-title">✍️ Personalizado</h3>
+        <div class="as-custom-row">
+          <input v-model="novoAgente" class="as-input" placeholder="Descreva um agente (ex: Dono de academia em cidade pequena)" @keyup.enter="adicionarAgente()"/>
+          <button class="as-add-btn" @click="adicionarAgente()">+</button>
+        </div>
+      </section>
+
+      <!-- Selecionados -->
+      <section class="agents-section" v-if="customAgents.length">
+        <h3 class="as-title">Seus agentes</h3>
+        <div class="as-selected">
+          <span v-for="(a, i) in customAgents" :key="i" class="as-sel-tag"
+                :style="{'border-color': AGENT_LIBRARY.find(c => c.id === a.categoryId)?.color || '#00e5c3'}">
+            {{ a.name }} <span class="as-sel-x" @click="removeAgent(i)">x</span>
+          </span>
+        </div>
+      </section>
+
+      <!-- Auto-complete info -->
+      <div class="as-auto" v-if="autoCompleteCount > 0">
+        🤖 O AUGUR escolhera <strong>{{ autoCompleteCount }} agentes adicionais</strong> automaticamente, baseado na hipotese e nos participantes mais relevantes.
+      </div>
+
+      <!-- Iniciar -->
+      <button class="btn-iniciar" @click="confirmarAgentes()" :disabled="totalSelecionados === 0 && entityTypes.length === 0">
+        ✦ Iniciar Simulacao com {{ totalSelecionados || entityTypes.filter(e => e.selected).length }} agentes
+      </button>
     </div>
 
     <!-- ════════════════════════════ -->
     <!-- TELA DE PIPELINE             -->
     <!-- ════════════════════════════ -->
-    <div v-else class="pipeline">
+    <div v-else-if="tela === 'pipeline'" class="pipeline">
 
       <!-- Progresso global -->
       <div class="prog-global">
@@ -681,130 +772,7 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
         </button>
       </div>
 
-      <!-- ═══ SELEÇÃO DE AGENTES ═══ -->
-      <div v-if="showAgentSelection" class="agent-select-panel">
-        <!-- Header -->
-        <div class="asp-header">
-          <div class="asp-title-row">
-            <h3>🎭 Monte seu Painel de Agentes</h3>
-            <div class="asp-counter" :class="{'asp-counter-full': totalSelecionados >= cfgAgentes}">
-              {{ totalSelecionados }} / {{ cfgAgentes }} agentes
-            </div>
-          </div>
-          <p>Selecione quem participará da simulação. O AUGUR criará personas únicas para cada tipo escolhido.</p>
-        </div>
-
-        <!-- Auto-detectados da hipótese -->
-        <div class="asp-section asp-detected" v-if="entityTypes.length">
-          <h4>🔍 Detectados na sua Hipótese</h4>
-          <p class="asp-section-sub">O AUGUR identificou estes participantes relevantes automaticamente</p>
-          <div class="asp-detected-grid">
-            <div v-for="et in entityTypes" :key="et.name" 
-                 class="asp-chip" :class="{ 'asp-chip-on': et.selected }"
-                 @click="toggleEntityType(et)">
-              <span class="asp-chip-check">{{ et.selected ? '✓' : '' }}</span>
-              <span class="asp-chip-name">{{ et.name }}</span>
-              <span class="asp-chip-badge">detectado</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Biblioteca por Categoria -->
-        <div class="asp-section">
-          <h4>📚 Biblioteca de Agentes</h4>
-          <p class="asp-section-sub">Adicione agentes de diferentes segmentos para enriquecer a simulação</p>
-          
-          <div class="asp-categories">
-            <div v-for="cat in AGENT_LIBRARY" :key="cat.id" class="asp-cat">
-              <!-- Category header (clickable) -->
-              <div class="asp-cat-header" @click="toggleCategory(cat.id)" :style="{'--cat-color': cat.color}">
-                <span class="asp-cat-icon">{{ cat.icon }}</span>
-                <span class="asp-cat-label">{{ cat.label }}</span>
-                <span class="asp-cat-count" v-if="agentCounts[cat.id]">{{ agentCounts[cat.id] }}</span>
-                <span class="asp-cat-arrow" :class="{'asp-cat-open': activeCategory === cat.id}">›</span>
-              </div>
-              
-              <!-- Agent list (expanded) -->
-              <div class="asp-cat-agents" v-if="activeCategory === cat.id">
-                <div v-for="agent in cat.agents" :key="agent.name" 
-                     class="asp-agent" :class="{ 'asp-agent-added': isAgentAdded(agent.name) }"
-                     @click="isAgentAdded(agent.name) ? null : addAgentFromLibrary(agent, cat.id)">
-                  <div class="asp-agent-left">
-                    <div class="asp-agent-dot" :style="{background: cat.color}"></div>
-                    <div>
-                      <div class="asp-agent-name">{{ agent.name }}</div>
-                      <div class="asp-agent-desc">{{ agent.desc }}</div>
-                    </div>
-                  </div>
-                  <button v-if="!isAgentAdded(agent.name)" class="asp-agent-add" :style="{color: cat.color}">+ Adicionar</button>
-                  <span v-else class="asp-agent-ok">✓ Adicionado</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Nova Categoria -->
-        <div class="asp-section">
-          <div class="asp-new-cat-header">
-            <h4>🏷 Criar Nova Categoria</h4>
-            <button class="asp-toggle-cat" @click="showNewCategory = !showNewCategory">
-              {{ showNewCategory ? '✕ Fechar' : '+ Nova Categoria' }}
-            </button>
-          </div>
-          <div v-if="showNewCategory" class="asp-new-cat-form">
-            <div class="asp-new-cat-row">
-              <input v-model="novaCategoria.icon" class="asp-cat-icon-input" maxlength="2" placeholder="🏷"/>
-              <input v-model="novaCategoria.label" class="asp-input" placeholder="Nome da categoria (ex: Fornecedores de Tecnologia)" @keyup.enter="adicionarCategoria()"/>
-              <input v-model="novaCategoria.color" type="color" class="asp-color-input"/>
-              <button class="asp-add-btn" @click="adicionarCategoria()">Criar</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Agente personalizado -->
-        <div class="asp-section">
-          <h4>✍️ Agente Personalizado</h4>
-          <div class="asp-custom-row">
-            <input v-model="novoAgente" placeholder="Descreva o agente (ex: Dono de academia em cidade pequena)" 
-                   class="asp-input" @keyup.enter="adicionarAgente()"/>
-            <button class="asp-add-btn" @click="adicionarAgente()">Adicionar</button>
-          </div>
-        </div>
-
-        <!-- Agentes selecionados -->
-        <div class="asp-section" v-if="customAgents.length">
-          <h4>Seus Agentes Selecionados</h4>
-          <div class="asp-selected-list">
-            <span v-for="(a, i) in customAgents" :key="i" class="asp-sel-tag" 
-                  :style="{'--tc': AGENT_LIBRARY.find(c => c.id === a.categoryId)?.color || '#00e5c3'}">
-              {{ a.name }}
-              <span class="asp-sel-x" @click="removeAgent(i)">✕</span>
-            </span>
-          </div>
-        </div>
-
-        <!-- Auto-complete info -->
-        <div class="asp-auto" v-if="autoCompleteCount > 0">
-          <span class="asp-auto-icon">🤖</span>
-          <span>O AUGUR escolherá <strong>{{ autoCompleteCount }} agentes adicionais</strong> automaticamente, baseado na sua hipótese e nos participantes mais relevantes para o cenário.</span>
-        </div>
-
-        <!-- Footer -->
-        <div class="asp-footer">
-          <div class="asp-footer-info">
-            <div class="asp-count-bar">
-              <div class="asp-count-fill" :style="{width: Math.min(100, (totalSelecionados / cfgAgentes) * 100) + '%'}"></div>
-            </div>
-            <span class="asp-count-text">{{ totalSelecionados }} selecionados · {{ autoCompleteCount }} auto-complete · {{ cfgAgentes }} total</span>
-          </div>
-          <button class="asp-confirm" @click="confirmarAgentes()" :disabled="totalSelecionados === 0 && entityTypes.length === 0">
-            Confirmar e Gerar Agentes →
-          </button>
-        </div>
-      </div>
-
-      <!-- Timeline -->
+            <!-- Timeline -->
       <div class="timeline">
         <div v-for="(fase, idx) in fases" :key="fase.key" class="tl-item">
           <div class="tl-left">
@@ -955,6 +923,62 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 .btn-ghost:hover { color: var(--text-primary); border-color: var(--border-md); }
 .btn-retry { background: var(--accent2); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .btn-retry:hover { opacity: .85; }
+
+/* ═══ AGENTS PAGE ═══ */
+.agents-wrap { max-width:800px; margin:0 auto; }
+.agents-page-header { display:flex; gap:16px; align-items:center; margin-bottom:24px; }
+.agents-page-title { font-size:22px; font-weight:700; color:var(--text, #f0f0ff); }
+.agents-page-sub { font-size:13px; color:var(--text-muted, #8888aa); margin-top:2px; }
+
+.agents-counter-bar { position:relative; height:8px; background:rgba(255,255,255,0.06); border-radius:4px; margin-bottom:24px; overflow:hidden; }
+.acb-fill { height:100%; background:linear-gradient(90deg, #7c6ff7, #00e5c3); border-radius:4px; transition:width .3s; }
+.acb-text { position:absolute; top:12px; left:0; font-size:11px; color:var(--text-muted, #8888aa); }
+
+.agents-section { background:var(--bg-surface, #111118); border:1px solid rgba(255,255,255,0.06); border-radius:16px; padding:20px; margin-bottom:16px; }
+.as-title { font-size:16px; font-weight:700; color:var(--text, #f0f0ff); margin-bottom:4px; }
+.as-sub { font-size:12px; color:var(--text-muted, #555570); margin-bottom:14px; }
+
+.as-chips { display:flex; flex-wrap:wrap; gap:8px; }
+.as-chip { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:24px; border:2px solid rgba(124,111,247,0.2); background:rgba(124,111,247,0.04); cursor:pointer; transition:all .2s; font-size:13px; color:#f0f0ff; font-weight:500; }
+.as-chip:hover { border-color:rgba(124,111,247,0.5); }
+.as-chip-on { border-color:#7c6ff7; background:rgba(124,111,247,0.15); }
+.as-chip-check { width:18px; height:18px; border-radius:50%; background:rgba(124,111,247,0.15); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; color:#7c6ff7; }
+.as-chip-on .as-chip-check { background:#7c6ff7; color:#fff; }
+
+.as-cats { display:flex; flex-direction:column; gap:4px; }
+.as-cat-head { display:flex; align-items:center; gap:12px; padding:12px 16px; border-radius:12px; cursor:pointer; transition:all .15s; }
+.as-cat-head:hover { background:rgba(255,255,255,0.03); }
+.as-cat-icon { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+.as-cat-name { flex:1; font-size:14px; font-weight:600; color:#f0f0ff; }
+.as-cat-badge { width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; color:#fff; }
+.as-cat-arrow { font-size:18px; color:#555570; transition:transform .2s; font-weight:700; }
+.as-open { transform:rotate(90deg); }
+
+.as-cat-body { padding:4px 0 8px 48px; }
+.as-agent { display:flex; gap:12px; align-items:flex-start; padding:10px 14px; border-radius:10px; cursor:pointer; transition:background .15s; }
+.as-agent:hover { background:rgba(255,255,255,0.03); }
+.as-agent-added { opacity:0.5; cursor:default; }
+.as-agent-dot { width:8px; height:8px; border-radius:50%; margin-top:6px; flex-shrink:0; }
+.as-agent-info { flex:1; }
+.as-agent-name { font-size:13px; font-weight:600; color:#f0f0ff; }
+.as-agent-desc { font-size:11px; color:#8888aa; line-height:1.4; margin-top:2px; }
+.as-agent-add { font-size:18px; font-weight:700; }
+.as-agent-ok { font-size:12px; color:#00e5c3; font-weight:600; }
+
+.as-custom-row { display:flex; gap:8px; }
+.as-input { flex:1; padding:10px 16px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:#f0f0ff; font-size:13px; outline:none; }
+.as-input:focus { border-color:rgba(0,229,195,0.4); }
+.as-add-btn { width:40px; height:40px; border-radius:10px; border:none; background:#00e5c3; color:#09090f; font-size:20px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+
+.as-selected { display:flex; flex-wrap:wrap; gap:6px; }
+.as-sel-tag { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:20px; background:rgba(255,255,255,0.04); border:1px solid; color:#f0f0ff; font-size:12px; font-weight:500; }
+.as-sel-x { cursor:pointer; opacity:0.5; font-size:10px; }
+.as-sel-x:hover { opacity:1; }
+
+.as-auto { padding:14px 18px; background:rgba(0,229,195,0.04); border:1px solid rgba(0,229,195,0.15); border-radius:12px; margin-bottom:16px; font-size:12px; color:#8888aa; line-height:1.6; }
+.as-auto strong { color:#00e5c3; }
+
+.agents-wrap .btn-iniciar { width:100%; margin-top:8px; }
 
 /* ═══ AGENT SELECTION ═══ */
 .agent-select-panel { background:var(--bg-surface, #111118); border:1px solid rgba(255,255,255,0.08); border-radius:20px; padding:28px; margin-bottom:20px; }
