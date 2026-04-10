@@ -9,6 +9,13 @@ const route  = useRoute()
 const router = useRouter()
 const report     = ref(null)
 const activeTab = ref('decisao')
+const printMode = ref(false)
+
+// Detectar impressao
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeprint', () => { printMode.value = true })
+  window.addEventListener('afterprint', () => { printMode.value = false })
+}
 const expandedSections = ref(new Set())
 const shareCode = ref('')
 const shareLoading = ref(false)
@@ -471,7 +478,7 @@ const cenarios = computed(() => {
   
   // Nomes: filtrar nomes que sao titulos de secao
   const nomes = headings.length >= 3 
-    ? headings.filter(n => !n.toLowerCase().startsWith('cenarios') && !n.toLowerCase().startsWith('cenários'))
+    ? headings.filter(n => !n.toLowerCase().startsWith('cenarios') && !n.toLowerCase().startsWith('cenários') && !n.startsWith(',') && !n.startsWith('.') && n.length > 5 && !/^\d+$/.test(n))
     : []
   if (nomes.length < 3) {
     // Fallback com nomes mais especificos
@@ -535,7 +542,7 @@ const parsedRiscos = computed(() => {
     const impacto = impMatch ? impMatch[1].charAt(0).toUpperCase() + impMatch[1].slice(1).toLowerCase() : 'Médio'
     
     // Descrição: tudo após o nome, limpo
-    let desc = block.replace(/\*\*[^*]*\*\*/g, '').replace(/\d+[.)\s]/, '')
+    let desc = block.replace(/\*\*#?[^*]*\*\*/g, '').replace(/^#+\s*/gm, '').replace(/\d+[.)\s]/, '')
       .replace(/probabilidade[^\n]*/gi, '').replace(/impacto[^\n]*/gi, '')
       .replace(/\n+/g, ' ').trim().slice(0, 250)
     if (desc.length < 10) desc = block.replace(/\*\*/g, '').replace(/\n+/g, ' ').trim().slice(0, 250)
@@ -932,7 +939,7 @@ function abrirChat() {
       </nav>
 
       <!-- ═══ TAB: DECISÃO ═══ -->
-      <div v-show="activeTab === 'decisao'">
+      <div v-show="activeTab === 'decisao' || printMode">
 
       <div class="layer-label"><span class="ll-icon">⚡</span> Decisão em 30 segundos</div>
 
@@ -975,15 +982,15 @@ function abrirChat() {
         <div class="ceo-grid">
           <div class="ceo-card">
             <div class="ceo-label">DECISÃO RECOMENDADA</div>
-            <div class="ceo-value">{{ (briefingCEO.decisao || '').length > 100 ? (briefingCEO.decisao || '').slice(0, 97) + '...' : briefingCEO.decisao }}</div>
+            <div class="ceo-value">{{ (briefingCEO.decisao || '').length > 150 ? (briefingCEO.decisao || '').slice(0, 147) + '...' : briefingCEO.decisao }}</div>
           </div>
           <div class="ceo-card">
             <div class="ceo-label">CENÁRIO MAIS PROVÁVEL</div>
-            <div class="ceo-value">{{ (briefingCEO.cenario || '').length > 100 ? (briefingCEO.cenario || '').slice(0, 97) + '...' : briefingCEO.cenario }}</div>
+            <div class="ceo-value">{{ (briefingCEO.cenario || '').length > 150 ? (briefingCEO.cenario || '').slice(0, 147) + '...' : briefingCEO.cenario }}</div>
           </div>
           <div class="ceo-card">
             <div class="ceo-label">RISCO CRÍTICO AGORA</div>
-            <div class="ceo-value ceo-risk">{{ (briefingCEO.risco || '').length > 100 ? (briefingCEO.risco || '').slice(0, 97) + '...' : briefingCEO.risco }}</div>
+            <div class="ceo-value ceo-risk">{{ (briefingCEO.risco || '').length > 150 ? (briefingCEO.risco || '').slice(0, 147) + '...' : briefingCEO.risco }}</div>
           </div>
           <div class="ceo-card">
             <div class="ceo-label">SENTIMENTO GERAL</div>
@@ -1061,7 +1068,7 @@ function abrirChat() {
       </div><!-- /tab decisao -->
 
       <!-- ═══ TAB: ANÁLISE ═══ -->
-      <div v-show="activeTab === 'analise'">
+      <div v-show="activeTab === 'analise' || printMode">
 
       <div class="layer-label"><span class="ll-icon">📊</span> Análise executiva</div>
 
@@ -1152,7 +1159,7 @@ function abrirChat() {
                 <h4>{{ r.name.replace(/^[#*\s]+/, "").replace(/[*#]+/g, "") }}</h4>
                 <span v-if="r.urgencia" class="rec-urg" :style="{background: r.urgColor+'18', color: r.urgColor, border: '1px solid '+r.urgColor+'44'}">{{ r.urgencia }}</span>
               </div>
-              <p>{{ r.desc }}</p>
+              <p>{{ r.desc.replace(/\*\*/g, "").replace(/^#+\s*/g, "").replace(/^#/g, "") }}</p>
               <div class="rec-prazo" v-if="r.prazo">🕐 {{ r.prazo }}</div>
             </div>
           </div>
@@ -1164,7 +1171,7 @@ function abrirChat() {
       </div><!-- /tab analise -->
 
       <!-- ═══ TAB: ESTRATÉGIA ═══ -->
-      <div v-show="activeTab === 'estrategia'">
+      <div v-show="activeTab === 'estrategia' || printMode">
 
       <!-- ═══ 8b. ESTRATÉGIA DE COMUNICAÇÃO ═══ -->
       <section class="rpt-section" v-if="secComunicacao?.content">
@@ -1205,7 +1212,7 @@ function abrirChat() {
       </div><!-- /tab estrategia -->
 
       <!-- ═══ TAB: PROFUNDA ═══ -->
-      <div v-show="activeTab === 'profunda'">
+      <div v-show="activeTab === 'profunda' || printMode">
 
       <div class="layer-label"><span class="ll-icon">🔬</span> Análise profunda</div>
 
@@ -1369,7 +1376,7 @@ function abrirChat() {
 .ceo-card { background:var(--c-card); border:1px solid var(--c-border); border-radius:12px; padding:16px; transition:border-color .2s; }
 .ceo-card:hover { border-color:var(--c-accent); }
 .ceo-label { font-size:9px; font-weight:700; letter-spacing:1.5px; color:var(--c-dim); text-transform:uppercase; margin-bottom:8px; }
-.ceo-value { font-size:14px; font-weight:600; color:var(--c-text); line-height:1.4; }
+.ceo-value { font-size:12px; font-weight:600; color:var(--c-text); line-height:1.4; }
 .ceo-risk { color:var(--c-danger); }
 
 /* ═══ KPI STRIP ═══ */
@@ -1506,7 +1513,7 @@ function abrirChat() {
 .valor-section { background:linear-gradient(135deg, rgba(245,166,35,0.04), rgba(0,229,195,0.03)) !important; border-color:rgba(245,166,35,0.2) !important; }
 
 /* ═══ TABS ═══ */
-.rpt-tabs { display:flex; gap:4px; background:var(--c-card); border:1px solid var(--c-border); border-radius:14px; padding:4px; margin-bottom:24px; position:sticky; top:0; z-index:10; }
+.rpt-tabs { display:flex; gap:4px; background:var(--c-card); border:1px solid var(--c-border); border-radius:14px; padding:6px; margin-bottom:28px; z-index:10; }
 .rpt-tab { flex:1; padding:12px 16px; border:none; background:none; border-radius:10px; font-size:13px; font-weight:600; color:var(--c-muted); cursor:pointer; transition:all .2s; white-space:nowrap; }
 .rpt-tab:hover { background:rgba(255,255,255,0.04); color:var(--c-text); }
 .rpt-tab-on { background:var(--c-accent) !important; color:#09090f !important; box-shadow:0 2px 8px rgba(0,229,195,0.25); }
@@ -1564,12 +1571,18 @@ function abrirChat() {
 
 /* ═══ PRINT ═══ */
 @media print {
-  .rpt-topbar, .AppShell, nav, aside, .tb-btn, .cta-section { display:none !important; }
-  .rpt-wrap { max-width:100%; padding:0; }
-  .rpt-section { break-inside:avoid; page-break-inside:avoid; }
+  .rpt-topbar, nav, aside, .tb-btn, .cta-section, .rpt-tabs { display:none !important; }
+  .rpt-wrap { max-width:100% !important; padding:0 !important; margin:0 !important; }
+  .rpt-wrap > div[v-show], .rpt-wrap > div { display:block !important; visibility:visible !important; }
+  .rpt-section { break-inside:avoid; page-break-inside:avoid; margin-bottom:16px; }
   .rpt-hero { break-after:page; }
   .closing-page { break-before:page; }
-  * { color-adjust:exact; -webkit-print-color-adjust:exact; }
+  .ctx-page { break-after:page; }
+  .sec-collapse { max-height:none !important; overflow:visible !important; }
+  .sec-collapse::after { display:none !important; }
+  .sec-toggle { display:none !important; }
+  * { color-adjust:exact !important; -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+  body, html { overflow:visible !important; }
 }
 /* ═══ PRINT ═══ */
 @media print {
