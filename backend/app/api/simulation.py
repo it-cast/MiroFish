@@ -2203,27 +2203,87 @@ def interview_agent():
                 "error": t('api.invalidInterviewPlatform')
             }), 400
         
-        if not SimulationRunner.check_env_alive(simulation_id):
+        # Se simulacao esta viva, usar IPC
+        if SimulationRunner.check_env_alive(simulation_id):
+            optimized_prompt = optimize_interview_prompt(prompt)
+            result = SimulationRunner.interview_agent(
+                simulation_id=simulation_id,
+                agent_id=agent_id,
+                prompt=optimized_prompt,
+                platform=platform,
+                timeout=timeout
+            )
+            return jsonify({
+                "success": result.get("success", False),
+                "data": result
+            })
+        
+        # Simulacao concluida — usar LLM direto com perfil do agente
+        logger.info(f"Interview offline: sim={simulation_id}, agent={agent_id}")
+        try:
+            from ..utils.llm_client import LLMClient
+            
+            # Carregar perfil do agente
+            manager = SimulationManager()
+            profiles = manager.get_profiles(simulation_id, platform=platform or 'reddit')
+            agent_profile = None
+            if isinstance(profiles, list) and len(profiles) > int(agent_id or 0):
+                agent_profile = profiles[int(agent_id)]
+            
+            profile_text = ""
+            if agent_profile:
+                name = agent_profile.get('name', agent_profile.get('user_name', f'Agente {agent_id}'))
+                bio = agent_profile.get('bio', agent_profile.get('description', ''))
+                personality = agent_profile.get('personality', agent_profile.get('mbti', ''))
+                profile_text = f"Nome: {name}\nBio: {bio}\nPersonalidade: {personality}"
+            else:
+                profile_text = f"Agente {agent_id} da simulacao"
+            
+            # Carregar contexto do relatorio
+            report_context = ""
+            try:
+                from ..services.report_agent import ReportManager
+                reports = ReportManager.list_reports_by_simulation(simulation_id)
+                if reports:
+                    r = reports[0]
+                    report_context = r.outline.summary if r.outline else ""
+            except:
+                pass
+            
+            llm = LLMClient(model='gpt-5.4-mini')  # mini para chat rapido
+            messages = [
+                {"role": "system", "content": f"""Voce e um agente de simulacao de opiniao publica. Responda em PT-BR como se fosse esta persona:
+
+{profile_text}
+
+Contexto da simulacao: {report_context[:500]}
+
+Responda de forma natural, como se fosse este agente sendo entrevistado sobre o tema. Seja especifico, use sua perspectiva unica como esta persona."""},
+                {"role": "user", "content": prompt}
+            ]
+            
+            response = llm.chat(messages=messages, temperature=0.7, max_tokens=1000)
+            
+            return jsonify({
+                "success": True,
+                "data": {
+                    "agent_id": agent_id,
+                    "prompt": prompt,
+                    "result": {
+                        "agent_id": agent_id,
+                        "response": response,
+                        "platform": platform or "twitter",
+                        "offline": True
+                    },
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            })
+        except Exception as e2:
+            logger.error(f"Interview offline falhou: {e2}")
             return jsonify({
                 "success": False,
-                "error": t('api.envNotRunning')
-            }), 400
-        
-        # promptAgentFerramenta
-        optimized_prompt = optimize_interview_prompt(prompt)
-        
-        result = SimulationRunner.interview_agent(
-            simulation_id=simulation_id,
-            agent_id=agent_id,
-            prompt=optimized_prompt,
-            platform=platform,
-            timeout=timeout
-        )
-
-        return jsonify({
-            "success": result.get("success", False),
-            "data": result
-        })
+                "error": f"Simulacao concluida e entrevista offline falhou: {str(e2)}"
+            }), 500
         
     except ValueError as e:
         return jsonify({
