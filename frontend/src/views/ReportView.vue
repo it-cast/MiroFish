@@ -247,7 +247,7 @@ const briefingCEO = computed(() => {
   const cenarioPrincipal = cenarios.value?.[0]?.nome || 'Sem cenário dominante'
   
   // Decisão: da recomendação OU extrair do resumo executivo
-  let decisao = parsedRecomendacoes.value?.[0]?.name || ''
+  let decisao = (parsedRecomendacoes.value?.[0]?.name || '').replace(/\*\*/g, '').replace(/^#+\s*/g, '')
   if (!decisao) {
     const resumo = secResumo.value?.content || ''
     const decMatch = resumo.match(/(?:recomend|suger|deve|precis)[^.]*\./) 
@@ -255,7 +255,7 @@ const briefingCEO = computed(() => {
   }
   
   // Risco: do parser OU extrair do resumo
-  let risco = parsedRiscos.value?.[0]?.name || ''
+  let risco = (parsedRiscos.value?.[0]?.name || '').replace(/\*\*/g, '').replace(/^#+\s*/g, '')
   if (!risco) {
     const resumo = secResumo.value?.content || ''
     const riskMatch = resumo.match(/(?:risco|desafio|ameaça|preocup)[^.]*\./)
@@ -432,7 +432,7 @@ const kpiCards = computed(() => {
       const label = m[1].trim()
       const valor = m[2].trim().slice(0, 40)
       if (label.length > 3 && label.length < 40 && !label.toLowerCase().includes('seção')) {
-        cards.push({ label, valor, trend: trendFrom(valor) })
+        cards.push({ label: label.replace(/\*\*/g,'').replace(/^[-•#]\s*/,'').trim(), valor: valor.replace(/\*\*/g,'').replace(/^[-•#]\s*/,'').trim(), trend: trendFrom(valor) })
       }
     }
   })
@@ -1003,14 +1003,14 @@ function abrirChat() {
       <section v-if="kpiCards.length" class="kpi-strip">
         <div v-for="k in kpiCards" :key="k.label" class="kpi-card">
           <div class="kpi-top">
-            <span class="kpi-name">{{ k.label }}</span>
+            <span class="kpi-name">{{ k.label.replace(/\*\*/g, "") }}</span>
             <span class="kpi-trend" :class="k.trend">
               <template v-if="k.trend==='up'">↗</template>
               <template v-else-if="k.trend==='down'">↘</template>
               <template v-else>→</template>
             </span>
           </div>
-          <div class="kpi-val">{{ typeof k.valor === "string" && k.valor.length > 80 ? k.valor.slice(0, 77) + "..." : k.valor }}</div>
+          <div class="kpi-val">{{ (k.valor || "").replace(/\*\*/g, "").slice(0, 60) }}</div>
         </div>
       </section>
 
@@ -1523,7 +1523,7 @@ function abrirChat() {
 .sec-collapsible:hover { opacity:0.85; }
 .sec-toggle { font-size:14px; color:var(--c-dim); margin-left:auto; }
 .sec-collapse { max-height:200px; overflow:hidden; position:relative; transition:max-height .4s ease; }
-.sec-collapse::after { content:''; position:absolute; bottom:0; left:0; right:0; height:60px; background:linear-gradient(transparent, var(--c-surface, #111118)); pointer-events:none; }
+.sec-collapse::after { content:''; position:absolute; bottom:0; left:0; right:0; height:80px; background:linear-gradient(rgba(255,255,255,0), #ffffff); pointer-events:none; z-index:1; }
 .sec-collapse.sec-open { max-height:none; overflow:visible; }
 .sec-collapse.sec-open::after { display:none; }
 
