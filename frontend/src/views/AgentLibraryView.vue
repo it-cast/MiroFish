@@ -333,16 +333,17 @@ function saveEditAgent(catId) {
 .alib-textarea { width:100%; padding:8px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:#f0f0ff; font-size:12px; outline:none; resize:vertical; font-family:inherit; }
 .alib-color-input { width:36px; height:36px; border:none; border-radius:8px; cursor:pointer; }
 
-.alib-search { display:flex; align-items:center; gap:10px; padding:10px 16px; background:var(--bg-surface, #111118); border:1px solid rgba(255,255,255,0.08); border-radius:12px; margin-bottom:20px; color:#555570; }
+.alib-search { display:flex; align-items:center; gap:12px; padding:12px 18px; background:var(--bg-surface, #111118); border:1px solid rgba(255,255,255,0.08); border-radius:14px; margin-bottom:24px; color:#555570; transition:border-color .2s; }
+.alib-search:focus-within { border-color:rgba(0,229,195,0.3); }
 .alib-search input { flex:1; background:none; border:none; color:#f0f0ff; font-size:13px; outline:none; }
 
 .alib-cats { display:flex; flex-direction:column; gap:6px; }
 .alib-cat { background:var(--bg-surface, #111118); border:1px solid rgba(255,255,255,0.06); border-radius:14px; overflow:hidden; }
-.alib-cat-head { display:flex; align-items:center; gap:12px; padding:14px 18px; cursor:pointer; transition:background .15s; }
-.alib-cat-head:hover { background:rgba(255,255,255,0.02); }
-.alib-cat-icon { width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+.alib-cat-head { display:flex; align-items:center; gap:14px; padding:16px 20px; cursor:pointer; transition:all .2s; border-radius:14px; }
+.alib-cat-head:hover { background:rgba(255,255,255,0.04); transform:translateX(4px); }
+.alib-cat-icon { width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; box-shadow:0 4px 12px rgba(0,0,0,0.15); }
 .alib-cat-info { flex:1; min-width:0; }
-.alib-cat-info h3 { font-size:14px; font-weight:700; color:#f0f0ff; }
+.alib-cat-info h3 { font-size:15px; font-weight:700; color:#f0f0ff; letter-spacing:0.3px; }
 .alib-cat-count { font-size:11px; color:#555570; }
 .alib-cat-tags { display:flex; gap:4px; flex-shrink:0; }
 .alib-mini-tag { font-size:10px; padding:2px 8px; border-radius:10px; background:rgba(255,255,255,0.04); color:#8888aa; white-space:nowrap; }
@@ -353,13 +354,14 @@ function saveEditAgent(catId) {
 .alib-cat-arrow.open { transform:rotate(90deg); }
 
 .alib-agents { padding:0 18px 14px; border-top:1px solid rgba(255,255,255,0.04); }
-.alib-agent { display:flex; gap:12px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,0.03); align-items:flex-start; }
-.alib-agent-dot { width:8px; height:8px; border-radius:50%; margin-top:7px; flex-shrink:0; }
+.alib-agent { display:flex; gap:14px; padding:14px 16px; border-bottom:none; align-items:flex-start; margin:2px 0; border-radius:10px; transition:background .15s; }
+.alib-agent-dot { width:10px; height:10px; border-radius:50%; margin-top:6px; flex-shrink:0; box-shadow:0 0 6px currentColor; }
 .alib-agent-body { flex:1; min-width:0; }
+.alib-agent:hover { background:rgba(255,255,255,0.03); }
 .alib-agent-name { font-size:14px; font-weight:600; color:#f0f0ff; }
 .alib-agent-desc { font-size:12px; color:#8888aa; line-height:1.5; margin-top:3px; }
 .alib-agent-tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
-.alib-tag { font-size:10px; padding:2px 8px; border-radius:8px; background:rgba(124,111,247,0.08); color:#7c6ff7; }
+.alib-tag { font-size:10px; padding:3px 10px; border-radius:10px; background:rgba(124,111,247,0.08); color:#7c6ff7; font-weight:600; letter-spacing:0.3px; }
 .alib-agent-actions { display:flex; gap:2px; flex-shrink:0; }
 .alib-agent-actions button { background:none; border:none; font-size:13px; cursor:pointer; padding:4px; opacity:0.4; transition:opacity .15s; }
 .alib-agent-actions button:hover { opacity:1; }
