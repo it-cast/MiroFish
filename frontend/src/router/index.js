@@ -115,6 +115,12 @@ const routes = [
     component: AgentLibraryView
   },
   {
+    path: '/relatorio-publico/:code',
+    name: 'PublicReport',
+    component: PublicReportView,
+    meta: { public: true }
+  },
+  {
     path: '/demo',
     name: 'Demo',
     component: DemoReportView
