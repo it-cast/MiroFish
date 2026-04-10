@@ -1515,7 +1515,7 @@ class ReportAgent:
             response = self.llm.chat(
                 messages=messages,
                 temperature=0.5,
-                max_tokens=4096
+                max_completion_tokens=4096
             )
 
             # LLM  NoneAPI Conteúdo
@@ -1715,7 +1715,7 @@ class ReportAgent:
         response = self.llm.chat(
             messages=messages,
             temperature=0.5,
-            max_tokens=4096
+            max_completion_tokens=4096
         )
 
         # Encerramento forçado LLM  None
