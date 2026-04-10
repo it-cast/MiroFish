@@ -511,7 +511,7 @@ const parsedRiscos = computed(() => {
     if (desc.length < 10) desc = block.replace(/\*\*/g, '').replace(/\n+/g, ' ').trim().slice(0, 250)
     
     risks.push({
-      name: name.replace(/\*\*/g, ''),
+      name: name.replace(/\*\*/g, '').replace(/^#+\s*/, '').trim(),
       desc,
       prob: Math.min(prob, 100),
       impacto: impacto.replace('Medio', 'Médio'),
@@ -566,7 +566,7 @@ const parsedRecomendacoes = computed(() => {
     if (desc.length < 10) desc = block.replace(/\*\*/g, '').replace(/\n/g, ' ').trim().slice(0, 300)
     
     recs.push({
-      name: name.replace(/\*\*/g, ''),
+      name: name.replace(/\*\*/g, '').replace(/^#+\s*/, '').trim(),
       desc,
       urgencia: urgencia.replace('Media', 'Média'),
       prazo,
@@ -803,9 +803,20 @@ const gerandoPDF = ref(false)
 const pageRef = ref(null)
 
 async function exportarPDF() {
+  // Tentar gerar PDF primeiro
   const reportId = route.params.reportId
   const downloadUrl = (import.meta.env.VITE_API_BASE_URL || '') + '/api/report/' + reportId + '/download'
-  window.open(downloadUrl, '_blank')
+  try {
+    const res = await fetch(downloadUrl)
+    const contentType = res.headers.get('content-type') || ''
+    if (contentType.includes('pdf')) {
+      // PDF real disponivel
+      window.open(downloadUrl, '_blank')
+      return
+    }
+  } catch {}
+  // Fallback: imprimir a pagina atual (Ctrl+P)
+  window.print()
 }
 
 function abrirChat() {
@@ -923,15 +934,15 @@ function abrirChat() {
         <div class="ceo-grid">
           <div class="ceo-card">
             <div class="ceo-label">DECISÃO RECOMENDADA</div>
-            <div class="ceo-value">{{ briefingCEO.decisao }}</div>
+            <div class="ceo-value">{{ (briefingCEO.decisao || '').length > 100 ? (briefingCEO.decisao || '').slice(0, 97) + '...' : briefingCEO.decisao }}</div>
           </div>
           <div class="ceo-card">
             <div class="ceo-label">CENÁRIO MAIS PROVÁVEL</div>
-            <div class="ceo-value">{{ briefingCEO.cenario }}</div>
+            <div class="ceo-value">{{ (briefingCEO.cenario || '').length > 100 ? (briefingCEO.cenario || '').slice(0, 97) + '...' : briefingCEO.cenario }}</div>
           </div>
           <div class="ceo-card">
             <div class="ceo-label">RISCO CRÍTICO AGORA</div>
-            <div class="ceo-value ceo-risk">{{ briefingCEO.risco }}</div>
+            <div class="ceo-value ceo-risk">{{ (briefingCEO.risco || '').length > 100 ? (briefingCEO.risco || '').slice(0, 97) + '...' : briefingCEO.risco }}</div>
           </div>
           <div class="ceo-card">
             <div class="ceo-label">SENTIMENTO GERAL</div>
@@ -951,7 +962,7 @@ function abrirChat() {
               <template v-else>→</template>
             </span>
           </div>
-          <div class="kpi-val">{{ k.valor }}</div>
+          <div class="kpi-val">{{ typeof k.valor === "string" && k.valor.length > 80 ? k.valor.slice(0, 77) + "..." : k.valor }}</div>
         </div>
       </section>
 
@@ -1064,10 +1075,10 @@ function abrirChat() {
         <div class="risk-cards" v-if="parsedRiscos.length >= 2">
           <div v-for="(r, i) in parsedRiscos" :key="i" class="risk-card" :style="{'--rc': r.color}">
             <div class="rc-header">
-              <h4>{{ r.name }}</h4>
+              <h4>{{ r.name.replace(/^[#*\s]+/, "").replace(/[*#]+/g, "") }}</h4>
               <span class="rc-badge" :style="{background: r.color+'18', color: r.color, border: '1px solid '+r.color+'44'}">{{ r.impacto }}</span>
             </div>
-            <p class="rc-desc">{{ r.desc }}</p>
+            <p class="rc-desc">{{ r.desc.replace(/\*\*/g, "").replace(/^[#*\s]+/, "").slice(0, 200) }}</p>
             <div class="rc-prob">
               <span>Probabilidade de ocorrência</span>
               <div class="rc-prob-bar"><div :style="{width: r.prob+'%', background: r.color}"></div></div>
@@ -1088,7 +1099,7 @@ function abrirChat() {
             <div class="rec-num">{{ i + 1 }}</div>
             <div class="rec-body">
               <div class="rec-top-row">
-                <h4>{{ r.name }}</h4>
+                <h4>{{ r.name.replace(/^[#*\s]+/, "").replace(/[*#]+/g, "") }}</h4>
                 <span v-if="r.urgencia" class="rec-urg" :style="{background: r.urgColor+'18', color: r.urgColor, border: '1px solid '+r.urgColor+'44'}">{{ r.urgencia }}</span>
               </div>
               <p>{{ r.desc }}</p>
@@ -1294,7 +1305,7 @@ function abrirChat() {
 .kpi-trend.up { color:var(--c-accent); }
 .kpi-trend.down { color:var(--c-danger); }
 .kpi-trend.stable { color:var(--c-dim); }
-.kpi-val { font-size:clamp(18px,2.5vw,24px); font-weight:800; color:var(--c-text); font-family:'JetBrains Mono',monospace; }
+.kpi-val { font-size:clamp(13px,1.8vw,16px); font-weight:800; color:var(--c-text); font-family:'JetBrains Mono',monospace; }
 
 /* ═══ SECTION COMMON ═══ */
 .rpt-section { background:var(--c-surface); border:1px solid var(--c-border); border-radius:var(--c-radius); padding:clamp(20px,3vw,28px); margin-bottom:20px; }
@@ -1461,6 +1472,14 @@ function abrirChat() {
 @media (max-width:768px) { .ctx-grid { grid-template-columns:1fr; } .ctx-stats { flex-direction:row; flex-wrap:wrap; } .closing-trio { grid-template-columns:1fr; } }
 
 /* ═══ PRINT ═══ */
+@media print {
+  .rpt-topbar, .AppShell, nav, aside, .tb-btn, .cta-section { display:none !important; }
+  .rpt-wrap { max-width:100%; padding:0; }
+  .rpt-section { break-inside:avoid; page-break-inside:avoid; }
+  .rpt-hero { break-after:page; }
+  .closing-page { break-before:page; }
+  * { color-adjust:exact; -webkit-print-color-adjust:exact; }
+}
 /* ═══ PRINT ═══ */
 @media print {
   .rpt-topbar, .tb-actions, .rpt-cta { display:none !important; }
