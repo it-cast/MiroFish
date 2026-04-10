@@ -959,7 +959,12 @@ function abrirChat() {
               {{ veredicto.icon }} {{ veredicto.label }}
             </div>
             <h2 class="hero-label">RESUMO EXECUTIVO</h2>
-          <div v-if="secResumo?.content" class="hero-text md-body" v-html="md(secResumo.content)"></div>
+          <div v-if="secResumo?.content" class="hero-text md-body" 
+               :class="{'hero-collapsed': !isExpanded('resumo')}"
+               v-html="md(secResumo.content)"></div>
+          <button v-if="secResumo?.content?.length > 500" class="hero-toggle" @click="toggleSection('resumo')">
+            {{ isExpanded('resumo') ? '▲ Recolher' : '▼ Ver resumo completo' }}
+          </button>
           <div v-if="simReq" class="hero-hipotese">
             <strong>Hipótese:</strong> {{ truncar(simReq, 300) }}
           </div>
@@ -1359,6 +1364,10 @@ function abrirChat() {
 .hero-content { min-width:0; }
 .hero-label { font-size:11px; font-weight:700; letter-spacing:2px; color:var(--c-accent); margin-bottom:8px; text-transform:uppercase; }
 .hero-text { font-size:14px; color:var(--c-muted); line-height:1.75; }
+.hero-collapsed { max-height:180px; overflow:hidden; position:relative; }
+.hero-collapsed::after { content:''; position:absolute; bottom:0; left:0; right:0; height:60px; background:linear-gradient(rgba(255,255,255,0), #ffffff); }
+.hero-toggle { display:block; margin:8px auto 0; padding:6px 20px; border:1px solid var(--c-border); background:white; border-radius:20px; font-size:12px; color:var(--c-accent); font-weight:600; cursor:pointer; transition:all .2s; }
+.hero-toggle:hover { background:rgba(0,229,195,0.05); border-color:var(--c-accent); }
 .hero-text :deep(strong) { color:var(--c-text); font-weight:600; }
 .hero-hipotese { font-size:12px; color:var(--c-dim); margin-top:12px; padding:10px 14px; background:rgba(124,111,247,0.06); border-left:3px solid var(--c-purple); border-radius:0 8px 8px 0; }
 .hero-badges { display:flex; flex-direction:column; gap:10px; }
