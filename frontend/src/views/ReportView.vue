@@ -426,10 +426,27 @@ const cenarios = computed(() => {
     .filter(n => n.length > 3 && !n.toLowerCase().includes('probabilidade') && !n.toLowerCase().includes('impacto'))
     .slice(0, 3)
   
-  const probs = [...content.matchAll(/(\d{1,3})\s*%/g)]
-    .map(m => parseInt(m[1])).filter(n => n >= 5 && n <= 95).slice(0, 6)
-  const nomes = headings.length >= 3 ? headings : ['Crescimento Sustentável', 'Cenário Base', 'Crise Operacional']
-  const ps = probs.length >= 3 ? probs.slice(0, 3) : [70, 20, 10]
+  // Extrair probabilidades e NORMALIZAR para somar 100%
+  const rawProbs = [...content.matchAll(/(?:probabilidade|prob)[^\d]*(\d{1,3})\s*%/gi)]
+    .map(m => parseInt(m[1])).filter(n => n >= 1 && n <= 99)
+  // Se nao achou com "probabilidade", pegar qualquer %
+  const allProbs = rawProbs.length >= 2 ? rawProbs : [...content.matchAll(/(\d{1,3})\s*%/g)]
+    .map(m => parseInt(m[1])).filter(n => n >= 5 && n <= 95)
+  const raw3 = allProbs.slice(0, 3)
+  // Normalizar para somar 100
+  const sum = raw3.reduce((a, b) => a + b, 0)
+  const ps = raw3.length >= 3 && sum > 0 ? raw3.map(p => Math.round(p * 100 / sum)) : [70, 20, 10]
+  // Garantir que soma = 100
+  if (ps.length === 3) { ps[0] = 100 - ps[1] - ps[2] }
+  
+  // Nomes: filtrar nomes que sao titulos de secao
+  const nomes = headings.length >= 3 
+    ? headings.filter(n => !n.toLowerCase().startsWith('cenarios') && !n.toLowerCase().startsWith('cenários'))
+    : []
+  if (nomes.length < 3) {
+    // Fallback com nomes mais especificos
+    while (nomes.length < 3) nomes.push(['Crescimento Sustentavel', 'Estagnacao', 'Crise'][nomes.length])
+  }
   // Extrair descrições (texto entre cenários)
   const descs = extractCenarioDescriptions(content, nomes)
   return [
@@ -1121,6 +1138,9 @@ function abrirChat() {
           </button>
         </div>
         <div class="deep-content md-body" v-if="deepSections[deepTab]" v-html="md(deepSections[deepTab].content || '')"></div>
+        <div v-else-if="!deepSections.length && secResumo?.content" class="md-body deep-fallback">
+          <p style="color:var(--c-dim);font-style:italic">Analise profunda nao disponivel para esta simulacao. Os dados completos estao distribuidos nas secoes acima.</p>
+        </div>
       </section>
 
       <!-- ═══ 11. NUVEM DE PALAVRAS ═══ -->
@@ -1170,12 +1190,12 @@ function abrirChat() {
             <div class="closing-item ci-action">
               <span class="ci-icon">⚡</span>
               <h4>Ação prioritária</h4>
-              <p>{{ parsedRecomendacoes[0]?.name || briefingCEO.decisao }}</p>
+              <p>{{ (parsedRecomendacoes[0]?.name || briefingCEO.decisao || "").replace(/[#*]/g, "").trim() }}</p>
             </div>
             <div class="closing-item">
               <span class="ci-icon">⚠️</span>
               <h4>Risco principal</h4>
-              <p>{{ parsedRiscos[0]?.name || briefingCEO.risco }}</p>
+              <p>{{ (parsedRiscos[0]?.name || briefingCEO.risco || "").replace(/[#*]/g, "").trim() }}</p>
             </div>
           </div>
 
@@ -1267,7 +1287,7 @@ function abrirChat() {
 
 /* ═══ KPI STRIP ═══ */
 .kpi-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:24px; }
-.kpi-card { background:var(--c-card); border:1px solid var(--c-border); border-radius:12px; padding:16px 18px; }
+.kpi-card { word-break:break-word; overflow-wrap:anywhere; background:var(--c-card); border:1px solid var(--c-border); border-radius:12px; padding:16px 18px; }
 .kpi-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
 .kpi-name { font-size:11px; color:var(--c-muted); font-weight:500; }
 .kpi-trend { font-size:14px; font-weight:700; }
