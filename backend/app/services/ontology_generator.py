@@ -9,6 +9,7 @@ import re
 from typing import Dict, Any, List, Optional
 from ..utils.llm_client import LLMClient
 from ..utils.locale import get_language_instruction
+from .ontology_prompts_v2 import detect_sector_and_decision, get_ontology_system_prompt_v3
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +160,12 @@ class OntologyGenerator:
         )
         
         lang_instruction = get_language_instruction()
-        system_prompt = f"{ONTOLOGY_SYSTEM_PROMPT}\n\nCRITICAL LANGUAGE RULE: The analysis_summary and ALL description fields MUST be written in Brazilian Portuguese (PT-BR). Do NOT write descriptions or summaries in Chinese or any other language.\n{lang_instruction}\nIMPORTANT: Entity type names MUST be in English PascalCase (e.g., 'PersonEntity', 'MediaOrganization'). Relationship type names MUST be in English UPPER_SNAKE_CASE (e.g., 'WORKS_FOR'). Attribute names MUST be in English snake_case. Only description fields and analysis_summary should use the specified language above."
+
+        # AUGUR v2: detecção bidimensional setor + tipo de decisão
+        sector, decision = detect_sector_and_decision(simulation_requirement)
+        logger.info(f"AUGUR v2 ontology: setor={sector}, decisao={decision}")
+
+        system_prompt = f"{get_ontology_system_prompt_v3(sector, decision)}\n\n{lang_instruction}"
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message}
@@ -172,6 +178,7 @@ class OntologyGenerator:
         )
         
         result = self._validate_and_process(result)
+        result["_augur_meta"] = {"setor": sector, "tipo_decisao": decision}
         
         return result
     
