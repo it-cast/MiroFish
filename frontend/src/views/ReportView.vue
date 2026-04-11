@@ -252,7 +252,7 @@ const briefingCEO = computed(() => {
   const cenarioPrincipal = cenarios.value?.[0]?.nome || 'Sem cenário dominante'
   
   // Decisão: da recomendação OU extrair do resumo executivo
-  let decisao = (parsedRecomendacoes.value?.[0]?.name || '').replace(/\*\*/g, '').replace(/^#+\s*/g, '')
+  let decisao = (parsedRecomendacoes.value?.[0]?.name || '').replace(/\*\*/g, '').replace(/^#+\s*/g, '').replace(/^\d+[.)\s]*/,'').split(';')[0].split(',').slice(0,2).join(',').trim()
   if (!decisao) {
     const resumo = secResumo.value?.content || ''
     const decMatch = resumo.match(/(?:recomend|suger|deve|precis)[^.]*\./) 
@@ -260,7 +260,7 @@ const briefingCEO = computed(() => {
   }
   
   // Risco: do parser OU extrair do resumo
-  let risco = (parsedRiscos.value?.[0]?.name || '').replace(/\*\*/g, '').replace(/^#+\s*/g, '')
+  let risco = (parsedRiscos.value?.[0]?.name || '').replace(/\*\*/g, '').replace(/^#+\s*/g, '').replace(/^\d+[.)\s]*/,'').split(':')[0].trim()
   if (!risco) {
     const resumo = secResumo.value?.content || ''
     const riskMatch = resumo.match(/(?:risco|desafio|ameaça|preocup)[^.]*\./)
@@ -434,10 +434,10 @@ const kpiCards = computed(() => {
     const re = /\*\*([^*:]+)\*\*[:\s]+([^.\n,]+(?:%|\d+)[^.\n,]*)/g
     let m
     while ((m = re.exec(s.content)) !== null && cards.length < 5) {
-      const label = m[1].trim()
-      const valor = m[2].trim().slice(0, 40)
-      if (label.length > 3 && label.length < 40 && !label.toLowerCase().includes('seção')) {
-        cards.push({ label: label.replace(/\*\*/g,'').replace(/^[-•#]\s*/,'').trim(), valor: valor.replace(/\*\*/g,'').replace(/^[-•#]\s*/,'').trim(), trend: trendFrom(valor) })
+      const label = m[1].trim().replace(/\*\*/g,'').replace(/^[-#\d.)\s]+/,'').replace(/:/g,'').trim()
+      const valor = m[2].trim().replace(/\*\*/g,'').replace(/^[-#\s]+/,'').trim().slice(0, 50)
+      if (label.length > 3 && label.length < 50 && !label.toLowerCase().includes('seção')) {
+        cards.push({ label, valor, trend: trendFrom(valor) })
       }
     }
   })
@@ -837,7 +837,11 @@ const wordCloudWords = computed(() => {
   return Object.entries(freq)
     .sort((a,b) => b[1] - a[1])
     .slice(0, 30)
-    .map(([text, count]) => ({ text, size: Math.max(12, Math.min(32, 10 + count * 3)) }))
+    .map(([text, count], i, arr) => {
+      const maxCount = arr[0]?.[1] || 1
+      const ratio = count / maxCount
+      return { text, size: Math.round(12 + ratio * 26) }
+    })
 })
 
 const secoesExtras = computed(() => {
@@ -1174,7 +1178,12 @@ function abrirChat() {
                 {{ ds.icon }} {{ ds.label }}
               </button>
             </div>
-            <div class="aug-prose" v-if="deepSections[deepTab]" v-html="md(deepSections[deepTab].content || '')"></div>
+            <div class="aug-prose" v-if="deepSections[deepTab]"
+                 :class="{'aug-collapsed': !isExpanded('deep'+deepTab)}"
+                 v-html="md(deepSections[deepTab].content || '')"></div>
+            <button v-if="(deepSections[deepTab]?.content||'').length > 800" class="aug-expand" @click="toggleSection('deep'+deepTab)">
+              {{ isExpanded('deep'+deepTab) ? '▲ Recolher' : '▼ Ver conteúdo completo' }}
+            </button>
             <div v-if="!deepSections.length" class="aug-empty">Análise profunda não disponível para esta simulação.</div>
           </section>
 
