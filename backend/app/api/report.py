@@ -432,12 +432,13 @@ def download_report(report_id: str):
                 "title": report.outline.title if report.outline else "Relatório",
                 "summary": report.outline.summary if report.outline else "",
                 "sections": [
-                    {"title": s.title, "content": s.content or ""}
+                    {"title": s.title, "content": s.content or "", "key": getattr(s, 'key', '')}
                     for s in (report.outline.sections if report.outline else [])
                 ]
             },
             "completed_at": getattr(report, 'completed_at', None),
             "created_at": getattr(report, 'created_at', None),
+            "structured": getattr(report, 'structured', None),
         }
         
         # ═══ PDF ═══
