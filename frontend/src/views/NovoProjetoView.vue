@@ -350,6 +350,25 @@ const steps = ['Projeto', 'Simulação', 'Materiais', 'Parâmetros']
 </template>
 
 <style scoped>
+/* ═══ AUGUR Light Design System ═══ */
+:deep(.app-content) {
+  --bg-base: #f5f5fa;
+  --bg-surface: #ffffff;
+  --bg-raised: #fafafe;
+  --bg-overlay: #f0f0f5;
+  --border: #eeeef2;
+  --border-md: #dddde5;
+  --text-primary: #1a1a2e;
+  --text-secondary: #444466;
+  --text-muted: #8888aa;
+  --accent: #00e5c3;
+  --accent-dim: rgba(0,229,195,0.08);
+  --accent2: #7c6ff7;
+  --accent2-dim: rgba(124,111,247,0.08);
+  --danger: #ff5a5a;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
 .page { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; padding-bottom: 60px; }
 
 .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
@@ -369,7 +388,7 @@ const steps = ['Projeto', 'Simulação', 'Materiais', 'Parâmetros']
 .step.done   .step-label { color: var(--text-secondary); }
 
 /* Card */
-.card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px; display: flex; flex-direction: column; gap: 20px; }
+.card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 16px;box-shadow:0 1px 3px rgba(0,0,0,0.04); padding: 28px; display: flex; flex-direction: column; gap: 20px; }
 .card-head { display: flex; align-items: flex-start; gap: 14px; }
 .card-icon-wrap { font-size: 24px; flex-shrink: 0; margin-top: 2px; }
 .card-titulo { font-size: 17px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
@@ -404,7 +423,7 @@ const steps = ['Projeto', 'Simulação', 'Materiais', 'Parâmetros']
 .drop-zone { border: 2px dashed var(--border-md); border-radius: 12px; padding: 28px; cursor: pointer; transition: all 0.2s; background: var(--bg-raised); }
 .drop-zone:hover, .drop-zone.over { border-color: var(--accent); background: rgba(0,229,195,0.03); }
 .drop-inner { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.drop-title { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.drop-title { font-size: 14px; font-weight:600; color: var(--text-primary); }
 .drop-sub { font-size: 12px; color: var(--text-muted); }
 
 .files { display: flex; flex-direction: column; gap: 6px; }
@@ -427,10 +446,10 @@ const steps = ['Projeto', 'Simulação', 'Materiais', 'Parâmetros']
 .param-label { font-size: 14px; font-weight: 600; color: var(--text-primary); }
 .param-val { font-size: 24px; font-weight: 800; color: var(--accent2); font-family: var(--font-mono); }
 .param-bounds { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); }
-.param-desc { font-size: 12px; color: var(--text-secondary); background: var(--bg-raised); border-radius: 6px; padding: 8px 12px; }
+.param-desc { font-size: 12px; color: var(--text-secondary); background: var(--bg-raised); border-radius:8px; padding: 8px 12px; }
 .slider { width: 100%; accent-color: var(--accent2); cursor: pointer; }
 
-.estimativas { display: flex; background: var(--bg-raised); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.estimativas { display: flex; background: var(--bg-raised); border: 1px solid var(--border); border-radius:14px; overflow: hidden; }
 .est { flex: 1; padding: 12px 14px; }
 .est-l { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
 .est-v { font-size: 16px; font-weight: 700; color: var(--text-primary); font-family: var(--font-mono); }
@@ -439,7 +458,7 @@ const steps = ['Projeto', 'Simulação', 'Materiais', 'Parâmetros']
 .accent2 { color: var(--accent2); }
 
 /* Resumo */
-.resumo { background: var(--bg-raised); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.resumo { background: var(--bg-raised); border: 1px solid var(--border); border-radius:14px; overflow: hidden; }
 .resumo-titulo { font-size: 11px; font-weight: 700; color: var(--text-muted); padding: 10px 14px 6px; text-transform: uppercase; letter-spacing: 0.6px; }
 .resumo-linha { display: flex; justify-content: space-between; align-items: flex-start; padding: 7px 14px; border-top: 1px solid var(--border); font-size: 13px; gap: 16px; }
 .rk { color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
@@ -448,10 +467,10 @@ const steps = ['Projeto', 'Simulação', 'Materiais', 'Parâmetros']
 /* Botões */
 .btn-ghost { background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 14px; padding: 10px 16px; border-radius: 8px; transition: color 0.15s; }
 .btn-ghost:hover { color: var(--text-primary); }
-.btn-next { background: var(--accent2); color: #fff; border: none; border-radius: 10px; padding: 12px 24px; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+.btn-next { background: var(--accent2); color: #fff; border: none; border-radius:14px; padding: 12px 24px; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
 .btn-next:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
 .btn-next:disabled { opacity: 0.3; cursor: not-allowed; }
-.btn-criar { background: var(--accent); color: #000; border: none; border-radius: 10px; padding: 13px 28px; font-size: 15px; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; letter-spacing: -0.2px; }
+.btn-criar { background: var(--accent); color: #000; border: none; border-radius:14px; padding: 13px 28px; font-size: 15px; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; letter-spacing: -0.2px; }
 .btn-criar:hover:not(:disabled) { opacity: 0.88; transform: translateY(-2px); }
 .btn-criar:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
 .spinner { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,0.25); border-top-color: #000; border-radius: 50%; animation: spin 0.7s linear infinite; }
