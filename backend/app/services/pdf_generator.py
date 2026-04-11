@@ -529,11 +529,33 @@ class PDFGenerator:
             pdf.line(8,pdf.get_y(),pdf.w-10,pdf.get_y()); pdf.ln(1)
 
     @classmethod
+    def _has_chart(cls, tl, scenarios, risks, emotions):
+        """Check if a section has an associated chart."""
+        if any(k in tl for k in ["cenário","cenario","futuro"]) and scenarios: return True
+        if "risco" in tl and risks: return True
+        if any(k in tl for k in ["emocional","sentimento"]): return True
+        if any(k in tl for k in ["mapa","força","forca"]): return True
+        if "cronologia" in tl or "timeline" in tl: return True
+        if any(k in tl for k in ["previsão","previsao","intervalo","confiança","confianca"]): return True
+        if "posicionamento" in tl: return True
+        return False
+
+    @classmethod
     def _p_section(cls, pdf, idx, total, sec, depth, scenarios, risks, emotions, predictions):
         stitle = sec.get("title",""); content = sec.get("content","")
         tl = stitle.lower()
+        has_chart = cls._has_chart(tl, scenarios, risks, emotions)
 
-        pdf.add_page()
+        # Smart page break: sections with charts ALWAYS get a new page.
+        # Text-only sections only break if page is >55% full.
+        if has_chart or idx == 0 or pdf.get_y() > 160:
+            pdf.add_page()
+        else:
+            # Separator line + spacing instead of page break
+            pdf.ln(4)
+            pdf.set_draw_color(*P.BORDER); pdf.set_line_width(0.3)
+            pdf.line(8, pdf.get_y(), pdf.w-10, pdf.get_y())
+            pdf.ln(6)
         # Accent sidebar is in header
 
         # Section tag + title
@@ -634,13 +656,13 @@ class PDFGenerator:
 
     @classmethod
     def _p_conclusion(cls, pdf, verdict, scenarios, risks, sections):
-        """Page: Conclusion + Next Steps + Viability Radar."""
+        """Page: Strategic Synthesis + Viability Radar."""
         pdf.add_page()
         pdf.set_fill_color(*P.ACCENT); pdf.rect(0,0,4,297,"F")
         pdf.set_x(8); pdf.set_font("Helvetica","",6.5); pdf.set_text_color(*P.ACCENT)
-        pdf.cell(0,3.5,pdf._c("CONCLUSAO"),new_x="LMARGIN",new_y="NEXT")
+        pdf.cell(0,3.5,pdf._c("SINTESE FINAL"),new_x="LMARGIN",new_y="NEXT")
         pdf.set_x(8); pdf.set_font("Helvetica","B",13); pdf.set_text_color(*P.TEXT)
-        pdf.cell(0,7,pdf._c("Conclusao e Proximos Passos"),new_x="LMARGIN",new_y="NEXT")
+        pdf.cell(0,7,pdf._c("Sintese e Direcionamento"),new_x="LMARGIN",new_y="NEXT")
         pdf.set_draw_color(*P.ACCENT); pdf.set_line_width(0.5)
         pdf.line(8,pdf.get_y()+1,50,pdf.get_y()+1); pdf.ln(4)
 
@@ -652,70 +674,86 @@ class PDFGenerator:
             except Exception as e:
                 logger.warning(f"Viability radar error: {e}")
 
-        # Verdict summary
+        # Verdict badge
         vc = {"GO":P.SUCCESS,"NO-GO":P.DANGER,"AJUSTAR":P.GOLD}
         pdf.set_fill_color(*vc.get(verdict,P.GOLD))
         bw = 60
         pdf.rect((pdf.w-bw)/2, pdf.get_y(), bw, 8, "F")
         pdf.set_font("Helvetica","B",9); pdf.set_text_color(255,255,255)
-        pdf.cell(0, 8, pdf._c(f"VEREDICTO FINAL: {verdict}"), align="C", new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(4)
+        pdf.cell(0, 8, pdf._c(f"VEREDICTO: {verdict}"), align="C", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(5)
 
-        # Extract top recommendation from sections
-        top_rec = ""
-        for sec in sections:
-            if any(k in sec.get("title","").lower() for k in ["recomend","estrateg"]):
-                content = sec.get("content","")
-                m = re.search(r'#1\s+(.+?)(?:\n|$)', content)
-                if m: top_rec = m.group(1).strip()
-                break
-
-        # 3 immediate actions
-        pdf.set_x(8); pdf.set_font("Helvetica","B",9.5); pdf.set_text_color(*P.TEXT)
-        pdf.cell(0, 5, pdf._c("O QUE FAZER ESTA SEMANA"), new_x="LMARGIN", new_y="NEXT"); pdf.ln(2)
-
-        actions = []
-        if top_rec:
-            actions.append(top_rec[:80])
+        # Strategic synthesis paragraph
+        pdf.set_x(8); pdf.set_font("Helvetica","",8.2); pdf.set_text_color(*P.BODY)
+        synth_parts = []
         if scenarios:
             best = max(scenarios, key=lambda s: s.get("probability",0))
-            actions.append(f"Planejar para o cenario mais provavel: {best['name'][:50]}")
+            synth_parts.append(f"O cenario mais provavel ({best['probability']}%) aponta para: {best['name'][:60]}.")
         if risks:
-            top_risk = risks[0]
-            actions.append(f"Mitigar risco #1: {top_risk['name'][:50]}")
-        if not actions:
-            actions = ["Revisar as recomendacoes estrategicas", "Definir cronograma de execucao", "Agendar sessao de estrategia"]
+            synth_parts.append(f"O risco principal ({risks[0].get('probability',0)}%) e: {risks[0]['name'][:55]}.")
+        synth = " ".join(synth_parts) if synth_parts else "A simulacao projetou cenarios com riscos e oportunidades claros."
+        pdf.multi_cell(pdf.w-18, 5, pdf._c(synth)); pdf.ln(4)
 
-        for i, action in enumerate(actions[:3], 1):
+        # Key risks to watch
+        pdf.set_x(8); pdf.set_font("Helvetica","B",9.5); pdf.set_text_color(*P.TEXT)
+        pdf.cell(0, 5, pdf._c("RISCOS QUE EXIGEM ATENCAO"), new_x="LMARGIN", new_y="NEXT"); pdf.ln(2)
+        for i, risk in enumerate(risks[:3], 1):
+            if pdf.get_y() > 260: pdf.add_page()
+            y0 = pdf.get_y()
+            sev_color = P.DANGER if risk.get("probability",0) > 70 else P.GOLD
+            pdf.set_fill_color(*P.SURFACE); pdf.rect(8, y0, pdf.w-18, 11, "F")
+            pdf.set_fill_color(*sev_color); pdf.rect(8, y0, 3, 11, "F")
+            pdf.set_xy(14, y0+1.5)
+            pdf.set_font("Helvetica","B",7.5); pdf.set_text_color(*P.TEXT)
+            pdf.cell(0, 4, pdf._c(f"#{i} {risk.get('name','')[:55]}"), new_x="LMARGIN", new_y="NEXT")
+            pdf.set_x(14); pdf.set_font("Helvetica","",6.5); pdf.set_text_color(*P.MUTED)
+            pdf.cell(0, 3.5, pdf._c(f"Probabilidade: {risk.get('probability',0)}% | Impacto: {risk.get('impact','N/A')}"))
+            pdf.set_y(y0 + 13)
+
+        # Strategic direction
+        pdf.ln(3)
+        pdf.set_x(8); pdf.set_font("Helvetica","B",9.5); pdf.set_text_color(*P.TEXT)
+        pdf.cell(0, 5, pdf._c("DIRECIONAMENTO ESTRATEGICO"), new_x="LMARGIN", new_y="NEXT"); pdf.ln(2)
+
+        # Extract recommendations from sections
+        recs = []
+        for sec in sections:
+            if any(k in sec.get("title","").lower() for k in ["recomend","estrateg"]):
+                for m in re.finditer(r'#\d+\s+(.+?)(?:\n|$)', sec.get("content","")):
+                    recs.append(m.group(1).strip()[:65])
+        if not recs:
+            recs = ["Validar posicionamento com clientes reais", "Monitorar metricas de recompra e indicacao", "Preservar margem sobre volume"]
+
+        for i, rec in enumerate(recs[:3], 1):
             if pdf.get_y() > 265: pdf.add_page()
             y0 = pdf.get_y()
-            pdf.set_fill_color(*P.SURFACE); pdf.rect(8, y0, pdf.w-18, 12, "F")
+            pdf.set_fill_color(*P.SURFACE); pdf.rect(8, y0, pdf.w-18, 10, "F")
             num_colors = [P.ACCENT, P.ACCENT2, P.GOLD]
             pdf.set_fill_color(*num_colors[(i-1)%3])
-            pdf.rect(8, y0, 12, 12, "F")
-            pdf.set_xy(10, y0+1)
-            pdf.set_font("Helvetica","B",9); pdf.set_text_color(255,255,255)
-            pdf.cell(8, 10, str(i), align="C")
-            pdf.set_xy(22, y0+2)
+            pdf.rect(8, y0, 10, 10, "F")
+            pdf.set_xy(9, y0+1)
+            pdf.set_font("Helvetica","B",8); pdf.set_text_color(255,255,255)
+            pdf.cell(8, 8, str(i), align="C")
+            pdf.set_xy(20, y0+2)
             pdf.set_font("Helvetica","",8); pdf.set_text_color(*P.TEXT)
-            pdf.multi_cell(pdf.w-34, 4.5, pdf._c(action))
-            pdf.set_y(y0 + 14)
+            pdf.cell(pdf.w-32, 5, pdf._c(rec))
+            pdf.set_y(y0 + 12)
 
         # Monitoring signals
-        pdf.ln(4)
+        pdf.ln(3)
         pdf.set_x(8); pdf.set_font("Helvetica","B",9); pdf.set_text_color(*P.TEXT)
         pdf.cell(0, 5, pdf._c("SINAIS PARA MONITORAR"), new_x="LMARGIN", new_y="NEXT"); pdf.ln(1)
         signals = [
-            ("Sinal positivo", "Recompra acima de 15%, indicacao espontanea, margem preservada", P.SUCCESS),
-            ("Sinal de alerta", "Conversao abaixo de 8%, desconto acima de 15%, dependencia de promocao", P.GOLD),
-            ("Sinal critico", "Break-even nao atinge ate M18, guerra de preco instalada, reputacao negativa", P.DANGER),
+            ("Consolidacao", "Recompra acima de 15%, indicacao espontanea, margem preservada", P.SUCCESS),
+            ("Alerta", "Conversao abaixo de 8%, desconto acima de 15%, dependencia de promocao", P.GOLD),
+            ("Risco critico", "Break-even nao atinge ate M18, guerra de preco, reputacao negativa", P.DANGER),
         ]
         for label, text, color in signals:
             if pdf.get_y() > 268: pdf.add_page()
-            pdf.set_x(8); pdf.set_font("Helvetica","B",7.5); pdf.set_text_color(*color)
-            pdf.cell(35, 4.5, pdf._c(f"  {label}:"))
-            pdf.set_font("Helvetica","",7.5); pdf.set_text_color(*P.BODY)
-            pdf.multi_cell(pdf.w-53, 4.5, pdf._c(text)); pdf.ln(1)
+            pdf.set_x(8); pdf.set_font("Helvetica","B",7); pdf.set_text_color(*color)
+            pdf.cell(28, 4.5, pdf._c(f"  {label}:"))
+            pdf.set_font("Helvetica","",7); pdf.set_text_color(*P.BODY)
+            pdf.multi_cell(pdf.w-46, 4.5, pdf._c(text)); pdf.ln(1)
 
     @classmethod
     def _p_back(cls, pdf, verdict):
