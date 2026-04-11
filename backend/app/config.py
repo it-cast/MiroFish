@@ -35,6 +35,9 @@ class Config:
     # ZepConfiguração
     ZEP_API_KEY = os.environ.get('ZEP_API_KEY')
     
+    # Perplexity — pesquisa de mercado (opcional)
+    PERPLEXITY_API_KEY = os.environ.get('PERPLEXITY_API_KEY', '')
+    
     # Configuração
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
     UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), '../uploads')
