@@ -12,6 +12,13 @@ from ..config import Config
 from ..services.ontology_generator import OntologyGenerator
 from ..services.graph_builder import GraphBuilderService
 from ..services.text_processor import TextProcessor
+from ..services.ontology_prompts_v2 import detect_sector_and_decision
+
+try:
+    from ..services.market_research import MarketResearcher, build_market_context_section
+    HAS_MARKET_RESEARCH = True
+except ImportError:
+    HAS_MARKET_RESEARCH = False
 from ..utils.file_parser import FileParser
 from ..utils.logger import get_logger
 from ..utils.locale import t, get_locale, set_locale
@@ -198,7 +205,30 @@ def generate_ontology():
         ProjectManager.save_extracted_text(project.project_id, all_text)
         logger.info(f" {len(all_text)} ")
         
-        # Gerar
+        # AUGUR v2: Pesquisa de mercado via Perplexity (antes da ontologia)
+        market_data = None
+        if HAS_MARKET_RESEARCH:
+            try:
+                researcher = MarketResearcher()
+                if researcher.is_available:
+                    sector, decision = detect_sector_and_decision(simulation_requirement)
+                    logger.info(f"Market research: setor={sector}, decisao={decision}")
+                    market_data = researcher.research(
+                        simulation_requirement=simulation_requirement,
+                        sector=sector,
+                        decision=decision,
+                    )
+                    # Injetar dados reais como contexto adicional
+                    if market_data.get("contexto_formatado"):
+                        if additional_context:
+                            additional_context += "\n\n" + market_data["contexto_formatado"]
+                        else:
+                            additional_context = market_data["contexto_formatado"]
+                        logger.info(f"Market research: {market_data['queries_executadas']} queries, {len(market_data.get('fontes_unicas',[]))} fontes, {market_data['tempo_segundos']}s")
+            except Exception as e:
+                logger.warning(f"Market research falhou (non-fatal): {e}")
+
+        # Gerar ontologia
         logger.info(" LLM Gerar...")
         generator = OntologyGenerator()
         ontology = generator.generate(
@@ -216,6 +246,9 @@ def generate_ontology():
             "edge_types": ontology.get("edge_types", [])
         }
         project.analysis_summary = ontology.get("analysis_summary", "")
+        # AUGUR v2: salvar dados de mercado para uso no relatório
+        if market_data and market_data.get("dados_mercado"):
+            project.market_research = market_data
         project.status = ProjectStatus.ONTOLOGY_GENERATED
         ProjectManager.save_project(project)
         logger.info(f"=== Gerar === ID: {project.project_id}")
