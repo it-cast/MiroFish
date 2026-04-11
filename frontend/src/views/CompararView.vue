@@ -256,11 +256,30 @@ function winner(valA, valB) {
 </template>
 
 <style scoped>
+/* ═══ AUGUR Light Design System ═══ */
+:deep(.app-content) {
+  --bg-base: #f5f5fa;
+  --bg-surface: #ffffff;
+  --bg-raised: #fafafe;
+  --bg-overlay: #f0f0f5;
+  --border: #eeeef2;
+  --border-md: #dddde5;
+  --text-primary: #1a1a2e;
+  --text-secondary: #444466;
+  --text-muted: #8888aa;
+  --accent: #00e5c3;
+  --accent-dim: rgba(0,229,195,0.08);
+  --accent2: #7c6ff7;
+  --accent2-dim: rgba(124,111,247,0.08);
+  --danger: #ff5a5a;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
 .state-box { display:flex;flex-direction:column;align-items:center;gap:14px;padding:60px;text-align:center;color:var(--text-muted); }
 .spin { width:24px;height:24px;border:3px solid var(--border-md);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite; }
 @keyframes sp { to { transform:rotate(360deg) } }
 
-.selector-bar { display:flex;align-items:flex-end;gap:16px;background:var(--bg-surface);border:1px solid var(--border);border-radius:14px;padding:20px 24px;margin-bottom:20px; }
+.selector-bar { display:flex;align-items:flex-end;gap:16px;background:var(--bg-surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,0.04);padding:20px 24px;margin-bottom:20px; }
 .sel-col { flex:1;display:flex;flex-direction:column;gap:6px; }
 .sel-label { font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px; }
 .sel-input { background:var(--bg-overlay);border:1px solid var(--border-md);color:var(--text-primary);padding:10px 12px;border-radius:8px;font-size:13px;outline:none;width:100%; }
@@ -270,7 +289,7 @@ function winner(valA, valB) {
 
 .results { display:flex;flex-direction:column;gap:16px; }
 
-.comp-section { background:var(--bg-surface);border:1px solid var(--border);border-radius:14px;padding:20px 24px; }
+.comp-section { background:var(--bg-surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,0.04);padding:20px 24px; }
 .cs-title { font-size:14px;font-weight:700;color:var(--text-primary);margin-bottom:16px; }
 
 /* Tabela de comparação */
@@ -289,7 +308,7 @@ function winner(valA, valB) {
 .comp-divider { width:1px;background:var(--border);margin:0 8px; }
 .col-label { font-size:12px;font-weight:700;color:var(--accent2);margin-bottom:4px; }
 
-.agent-row { display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px; }
+.agent-row { display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px; }
 .agent-row:hover { background:var(--bg-raised); }
 .ar-pos { font-size:11px;color:var(--text-muted);font-weight:700;min-width:20px; }
 .ar-name { font-size:13px;color:var(--text-primary);flex:1; }
