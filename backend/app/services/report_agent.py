@@ -29,6 +29,21 @@ from .zep_tools import (
     InterviewResult
 )
 
+# AUGUR v2 pipeline
+try:
+    from ..schemas.report_schema import validar_report_json
+    from .report_prompts_v2 import (
+        PLAN_SYSTEM_PROMPT_V2,
+        PLAN_USER_PROMPT_V2,
+        get_section_system_prompt,
+        parse_section_json,
+        assemble_report,
+        SECTION_KEYS_ORDERED,
+    )
+    HAS_V2 = True
+except ImportError:
+    HAS_V2 = False
+
 logger = get_logger('mirofish.report_agent')
 
 
@@ -444,9 +459,10 @@ class Report:
     created_at: str = ""
     completed_at: str = ""
     error: Optional[str] = None
+    structured: Optional[Dict[str, Any]] = None  # AUGUR v2: JSON estruturado
     
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d = {
             "report_id": self.report_id,
             "simulation_id": self.simulation_id,
             "graph_id": self.graph_id,
@@ -458,6 +474,9 @@ class Report:
             "completed_at": self.completed_at,
             "error": self.error
         }
+        if self.structured:
+            d["structured"] = self.structured
+        return d
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1290,15 +1309,27 @@ class ReportAgent:
         if progress_callback:
             progress_callback("planning", 30, t('progress.generatingOutline'))
         
-        system_prompt = f"{PLAN_SYSTEM_PROMPT}\n\n{get_language_instruction()}"
-        user_prompt = PLAN_USER_PROMPT_TEMPLATE.format(
-            simulation_requirement=self.simulation_requirement,
-            total_nodes=context.get('graph_statistics', {}).get('total_nodes', 0),
-            total_edges=context.get('graph_statistics', {}).get('total_edges', 0),
-            entity_types=list(context.get('graph_statistics', {}).get('entity_types', {}).keys()),
-            total_entities=context.get('total_entities', 0),
-            related_facts_json=json.dumps(context.get('related_facts', [])[:10], ensure_ascii=False, indent=2),
-        )
+        # AUGUR v2: usar prompts estruturados se disponível
+        if HAS_V2:
+            system_prompt = f"{PLAN_SYSTEM_PROMPT_V2}\n\n{get_language_instruction()}"
+            user_prompt = PLAN_USER_PROMPT_V2.format(
+                simulation_requirement=self.simulation_requirement,
+                total_nodes=context.get('graph_statistics', {}).get('total_nodes', 0),
+                total_edges=context.get('graph_statistics', {}).get('total_edges', 0),
+                entity_types=list(context.get('graph_statistics', {}).get('entity_types', {}).keys()),
+                total_entities=context.get('total_entities', 0),
+                related_facts_json=json.dumps(context.get('related_facts', [])[:10], ensure_ascii=False, indent=2),
+            )
+        else:
+            system_prompt = f"{PLAN_SYSTEM_PROMPT}\n\n{get_language_instruction()}"
+            user_prompt = PLAN_USER_PROMPT_TEMPLATE.format(
+                simulation_requirement=self.simulation_requirement,
+                total_nodes=context.get('graph_statistics', {}).get('total_nodes', 0),
+                total_edges=context.get('graph_statistics', {}).get('total_edges', 0),
+                entity_types=list(context.get('graph_statistics', {}).get('entity_types', {}).keys()),
+                total_entities=context.get('total_entities', 0),
+                related_facts_json=json.dumps(context.get('related_facts', [])[:10], ensure_ascii=False, indent=2),
+            )
 
         try:
             response = self.llm.chat_json(
@@ -1463,25 +1494,39 @@ class ReportAgent:
         if self.report_logger:
             self.report_logger.log_section_start(section.title, section_index)
         
-        system_prompt = SECTION_SYSTEM_PROMPT_TEMPLATE.format(
-            report_title=outline.title,
-            report_summary=outline.summary,
-            simulation_requirement=self.simulation_requirement,
-            section_title=section.title,
-            tools_description=self._get_tools_description(),
-        )
-        system_prompt = f"{system_prompt}\n\n{get_language_instruction()}"
+        # AUGUR v2: usar prompt de seção específico por key
+        section_key = getattr(section, 'key', '') or section.title.lower().replace(' ', '_')
 
-        # prompt - ConcluídoSeção4000
+        # Texto das seções já concluídas
+        completed_text = ""
         if previous_sections:
             previous_parts = []
             for sec in previous_sections:
-                # Seção4000
                 truncated = sec[:4000] + "..." if len(sec) > 4000 else sec
                 previous_parts.append(truncated)
-            previous_content = "\n\n---\n\n".join(previous_parts)
+            completed_text = "\n\n---\n\n".join(previous_parts)
+
+        if HAS_V2:
+            system_prompt = get_section_system_prompt(
+                section_key=section_key,
+                report_title=outline.title,
+                report_summary=outline.summary,
+                simulation_requirement=self.simulation_requirement,
+                tools_description=self._get_tools_description(),
+                completed_sections_text=completed_text,
+            )
+            system_prompt = f"{system_prompt}\n\n{get_language_instruction()}"
         else:
-            previous_content = "(Esta é a primeira seção)"
+            system_prompt = SECTION_SYSTEM_PROMPT_TEMPLATE.format(
+                report_title=outline.title,
+                report_summary=outline.summary,
+                simulation_requirement=self.simulation_requirement,
+                section_title=section.title,
+                tools_description=self._get_tools_description(),
+            )
+            system_prompt = f"{system_prompt}\n\n{get_language_instruction()}"
+
+        previous_content = completed_text if completed_text else "(Esta é a primeira seção)"
         
         user_prompt = SECTION_USER_PROMPT_TEMPLATE.format(
             previous_content=previous_content,
@@ -1599,6 +1644,15 @@ class ReportAgent:
                     continue
 
                 final_answer = response.split("Final Answer:")[-1].strip()
+                
+                # AUGUR v2: tentar extrair JSON estruturado
+                if HAS_V2:
+                    try:
+                        section._v2_data = parse_section_json(response, section_key)
+                        logger.info(f"v2 JSON parsed for section: {section_key}")
+                    except Exception:
+                        section._v2_data = None
+                
                 logger.info(t('report.sectionGenDone', title=section.title, count=tool_calls_count))
 
                 if self.report_logger:
@@ -1724,6 +1778,12 @@ class ReportAgent:
             final_answer = t('report.sectionGenFailedContent')
         elif "Final Answer:" in response:
             final_answer = response.split("Final Answer:")[-1].strip()
+            # AUGUR v2: tentar extrair JSON estruturado
+            if HAS_V2:
+                try:
+                    section._v2_data = parse_section_json(response, section_key)
+                except Exception:
+                    section._v2_data = None
         else:
             final_answer = response
         
@@ -1959,6 +2019,40 @@ class ReportAgent:
                 progress_callback("completed", 100, t('progress.reportComplete'))
             
             logger.info(t('report.reportGenDone', reportId=report_id))
+            
+            # AUGUR v2: montar JSON estruturado a partir dos dados das seções
+            if HAS_V2 and outline and outline.sections:
+                try:
+                    section_data = {}
+                    for sec in outline.sections:
+                        key = getattr(sec, 'key', '') or sec.title.lower().replace(' ', '_')
+                        v2_data = getattr(sec, '_v2_data', None)
+                        if v2_data and not isinstance(v2_data, str):
+                            section_data[key] = v2_data
+                    
+                    if section_data:
+                        meta = {
+                            "projeto": self.simulation_requirement,
+                            "setor": "varejo_local",
+                            "tipo_decisao": "novo_negocio",
+                            "data_geracao": datetime.now().isoformat(),
+                            "modelo_ia": self.model_name if hasattr(self, 'model_name') else "GPT-5.4",
+                            "num_agentes": context.get('total_entities', 6) if 'context' in dir() else 6,
+                            "num_rodadas": 5,
+                            "periodo_simulado_meses": 24,
+                        }
+                        report.structured = assemble_report(section_data, meta)
+                        
+                        errors = validar_report_json(report.structured)
+                        if errors:
+                            logger.warning(f"AUGUR v2 validation: {len(errors)} errors: {errors[:3]}")
+                        else:
+                            logger.info(f"AUGUR v2 structured report assembled: {len(section_data)} sections")
+                        
+                        # Re-salvar com structured
+                        ReportManager.save_report(report)
+                except Exception as e:
+                    logger.warning(f"AUGUR v2 assembly failed (non-fatal): {e}")
             
             if self.console_logger:
                 self.console_logger.close()
