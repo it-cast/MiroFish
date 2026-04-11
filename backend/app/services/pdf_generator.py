@@ -150,7 +150,7 @@ class PDFGenerator:
             x=sx+i*(bw+5)
             bg=C.A_LIGHT if i==1 else C.LIGHT
             pdf.set_fill_color(*bg); pdf.set_draw_color(*(C.ACCENT if i==1 else C.BORDER))
-            pdf.set_line_width(0.5); pdf.rounded_rect(x,y,bw,48,4,"DF")
+            pdf.set_line_width(0.5); pdf.rect(x,y,bw,48,"DF")
             pdf.set_xy(x+2,y+8); pdf.set_font("Helvetica","B",7); pdf.set_text_color(*C.DIM)
             pdf.cell(bw-4,4,lbl,align="C")
             pdf.set_xy(x+2,y+17); pdf.set_font("Helvetica","B",9); pdf.set_text_color(*C.BODY)
