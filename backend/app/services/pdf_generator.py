@@ -106,7 +106,7 @@ class PDFGenerator:
             n+=1
             pdf.set_font("Helvetica","B",11); pdf.set_text_color(*C.ACCENT)
             pdf.cell(12,9,f"{n:02d}"); pdf.set_font("Helvetica","",11); pdf.set_text_color(*C.BODY)
-            pdf.cell(0,9,s.get("title","")[:55],new_x="LMARGIN",new_y="NEXT")
+            pdf.cell(0,9,cls._c(s.get("title","")[:55]),new_x="LMARGIN",new_y="NEXT")
             pdf.set_draw_color(*C.BORDER); pdf.set_line_width(0.15); pdf.line(15,pdf.get_y(),195,pdf.get_y())
 
     @classmethod
@@ -118,7 +118,7 @@ class PDFGenerator:
         pdf.set_y(15); pdf.set_font("Helvetica","B",8); pdf.set_text_color(*col)
         pdf.cell(0,5,f"SECAO {num:02d} DE {total}",new_x="LMARGIN",new_y="NEXT"); pdf.ln(2)
         pdf.set_font("Helvetica","B",17); pdf.set_text_color(*C.BODY)
-        pdf.multi_cell(0,9,title); pdf.ln(1)
+        pdf.multi_cell(0,9,cls._c(title)); pdf.ln(1)
         pdf.set_draw_color(*col); pdf.set_line_width(1.5); pdf.line(15,pdf.get_y(),55,pdf.get_y())
         pdf.ln(8)
         cls._render(pdf, content)
@@ -154,7 +154,7 @@ class PDFGenerator:
             pdf.set_xy(x+2,y+8); pdf.set_font("Helvetica","B",7); pdf.set_text_color(*C.DIM)
             pdf.cell(bw-4,4,lbl,align="C")
             pdf.set_xy(x+2,y+17); pdf.set_font("Helvetica","B",9); pdf.set_text_color(*C.BODY)
-            pdf.multi_cell(bw-4,5,val[:55],align="C")
+            pdf.multi_cell(bw-4,5,cls._c(val[:55]),align="C")
         pdf.set_y(220); pdf.set_font("Helvetica","B",14); pdf.set_text_color(*C.ACCENT)
         pdf.cell(0,8,"AUGUR",align="C",new_x="LMARGIN",new_y="NEXT")
         pdf.set_font("Helvetica","I",10); pdf.set_text_color(*C.DIM)
@@ -184,26 +184,26 @@ class PDFGenerator:
                 pdf.add_page(); pdf.set_fill_color(*C.WHITE); pdf.rect(0,0,210,297,"F")
             if s.startswith("**") and s.endswith("**"):
                 pdf.ln(3); pdf.set_font("Helvetica","B",12); pdf.set_text_color(*C.BODY)
-                pdf.multi_cell(0,7,s.strip("* ")); pdf.ln(2); continue
+                pdf.multi_cell(0,7,cls._c(s.strip("* "))); pdf.ln(2); continue
             m = re.match(r'\*\*#?\d*\s*(.+?)\*\*', s)
             if m and len(s)<100:
                 pdf.ln(3); pdf.set_font("Helvetica","B",11); pdf.set_text_color(*C.PURPLE)
-                pdf.multi_cell(0,7,m.group(1).strip()); pdf.ln(1); continue
+                pdf.multi_cell(0,7,cls._c(m.group(1).strip())); pdf.ln(1); continue
             if s.startswith(">") or (s.startswith('"') and s.endswith('"')):
                 t=s.lstrip('> "').rstrip('"'); ys=pdf.get_y()
                 pdf.set_x(20); pdf.set_font("Helvetica","I",9); pdf.set_text_color(80,80,120)
-                pdf.set_fill_color(*C.P_LIGHT); pdf.multi_cell(170,5.5,f'"{t}"',fill=True)
+                pdf.set_fill_color(*C.P_LIGHT); pdf.multi_cell(170,5.5,cls._c(f'"{t}"'),fill=True)
                 pdf.set_fill_color(*C.PURPLE); pdf.rect(17,ys,2,pdf.get_y()-ys,"F"); pdf.ln(3); continue
             if s[:2] in ("- ","* ","\u2022 "):
                 t=s[2:].strip(); pdf.set_font("Helvetica","",9.5); pdf.set_text_color(*C.ACCENT)
-                pdf.cell(8,6,"\u25cf"); pdf.set_text_color(*C.BODY); pdf.multi_cell(170,6,t.replace("**","")); pdf.ln(1); continue
+                pdf.cell(8,6,"-"); pdf.set_text_color(*C.BODY); pdf.multi_cell(170,6,cls._c(t.replace("**",""))); pdf.ln(1); continue
             nm = re.match(r'^(\d+)[.)]\s+(.+)', s)
             if nm:
                 pdf.set_font("Helvetica","B",10); pdf.set_text_color(*C.ACCENT); pdf.cell(10,6,f"{nm.group(1)}.")
-                pdf.set_font("Helvetica","",9.5); pdf.set_text_color(*C.BODY); pdf.multi_cell(168,6,nm.group(2).replace("**","")); pdf.ln(2); continue
+                pdf.set_font("Helvetica","",9.5); pdf.set_text_color(*C.BODY); pdf.multi_cell(168,6,cls._c(nm.group(2).replace("**",""))); pdf.ln(2); continue
             if re.search(r'\d{1,3}\s*%',s) and ('probabilidade' in s.lower() or 'impacto' in s.lower()):
-                pdf.set_font("Helvetica","B",9); pdf.set_text_color(*C.GOLD); pdf.multi_cell(0,6,s.replace("**","")); pdf.ln(2); continue
-            pdf.set_font("Helvetica","",9.5); pdf.set_text_color(*C.BODY); pdf.multi_cell(0,6,s.replace("**","")); pdf.ln(2)
+                pdf.set_font("Helvetica","B",9); pdf.set_text_color(*C.GOLD); pdf.multi_cell(0,6,cls._c(s.replace("**",""))); pdf.ln(2); continue
+            pdf.set_font("Helvetica","",9.5); pdf.set_text_color(*C.BODY); pdf.multi_cell(0,6,cls._c(s.replace("**",""))); pdf.ln(2)
 
     @staticmethod
     def _c(t):
