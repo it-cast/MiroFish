@@ -27,7 +27,9 @@ SETORES = {
                      "eletronico", "movel", "decoracao", "brinquedo", "papelaria",
                      "otica", "joalheria", "bolsa", "acessorio", "perfumaria",
                      "moveis", "colchao", "eletrodomestico", "cama", "mesa",
-                     "farmacia", "drogaria", "pet shop", "livraria", "floricultura"],
+                     "farmacia", "drogaria", "pet shop", "livraria", "floricultura",
+                     "importadora", "revenda", "concessionaria", "automovel", "carro",
+                     "moto", "bicicleta", "coworking", "cemiterio"],
     },
     "saas_b2b": {
         "nome": "SaaS / software / plataforma digital",
@@ -41,7 +43,7 @@ SETORES = {
         "nome": "Indústria / bens de consumo / FMCG",
         "keywords": ["fabrica", "industria", "papel", "higienico", "fabricante",
                      "producao", "manufatura", "cpg", "fmcg", "embalagem",
-                     "distribuidora", "atacado", "companhia", "cia", "copapa",
+                     "distribuidora", "atacado", "companhia", "copapa",
                      "alimento industrializado", "bebida", "cerveja", "refrigerante",
                      "medicamento", "farmaceutica", "laboratorio", "generico",
                      "remedio", "principio ativo", "anvisa", "cosmetico",
@@ -56,7 +58,7 @@ SETORES = {
     "energia_tech": {
         "nome": "Energia / solar / EV / tecnologia limpa",
         "keywords": ["solar", "energia", "fotovoltaico", "carregador", "eletrico",
-                     "ev", "veiculo eletrico", "bateria", "sustentavel", "evo",
+                     "veiculo eletrico", "bateria", "sustentavel", "evo",
                      "eletroposto", "estacao de carga", "painel solar"],
     },
     "alimentacao": {
@@ -76,7 +78,10 @@ SETORES = {
         "nome": "Serviços profissionais / consultoria / saúde",
         "keywords": ["consultoria", "agencia", "clinica", "escritorio", "academia",
                      "salao", "personal", "advocacia", "contabilidade", "marketing",
-                     "design", "arquitetura", "curso", "mentoria", "terapia"],
+                     "design", "arquitetura", "curso", "mentoria", "terapia",
+                     "evento", "produtora", "casamento", "festa", "buffet",
+                     "escola", "ensino", "treinamento", "coaching", "veterinaria",
+                     "construtora", "imobiliaria", "turismo", "viagem"],
     },
     "franquia": {
         "nome": "Franquia / rede / expansão de marca",
