@@ -12,6 +12,7 @@ Caminho no repo: backend/app/services/ontology_prompts_v3.py
 """
 
 import json
+import unicodedata
 from typing import Tuple
 
 # ============================================================
@@ -25,20 +26,26 @@ SETORES = {
                      "moda", "boutique", "ponto comercial", "shopping", "centro",
                      "eletronico", "movel", "decoracao", "brinquedo", "papelaria",
                      "otica", "joalheria", "bolsa", "acessorio", "perfumaria",
-                     "moveis", "colchao", "eletrodomestico", "cama", "mesa"],
+                     "moveis", "colchao", "eletrodomestico", "cama", "mesa",
+                     "farmacia", "drogaria", "pet shop", "livraria", "floricultura"],
     },
     "saas_b2b": {
         "nome": "SaaS / software / plataforma digital",
         "keywords": ["saas", "software", "plataforma", "sistema", "erp", "crm",
                      "b2b", "api", "cloud", "assinatura", "startup", "automacao",
-                     "inteligencia artificial", "dashboard", "converzas", "chatbot"],
+                     "inteligencia artificial", "dashboard", "converzas", "chatbot",
+                     "gestao", "gerenciamento", "ferramenta", "solucao digital",
+                     "onboarding", "login", "usuario", "mensalidade"],
     },
     "industria_fmcg": {
         "nome": "Indústria / bens de consumo / FMCG",
         "keywords": ["fabrica", "industria", "papel", "higienico", "fabricante",
                      "producao", "manufatura", "cpg", "fmcg", "embalagem",
                      "distribuidora", "atacado", "companhia", "cia", "copapa",
-                     "alimento industrializado", "bebida", "cerveja", "refrigerante"],
+                     "alimento industrializado", "bebida", "cerveja", "refrigerante",
+                     "medicamento", "farmaceutica", "laboratorio", "generico",
+                     "remedio", "principio ativo", "anvisa", "cosmetico",
+                     "quimico", "siderurgica", "mineracao", "celulose"],
     },
     "telecom_isp": {
         "nome": "Telecomunicações / internet / ISP",
@@ -123,7 +130,10 @@ TIPOS_DECISAO = {
         "keywords": ["promocao", "campanha", "desconto", "sorteio", "dar",
                      "ganhar", "premiar", "copa", "black friday", "natal",
                      "dia das maes", "acao", "marketing", "engajamento",
-                     "fidelizacao", "cashback", "cupom", "brinde", "tv"],
+                     "fidelizacao", "cashback", "cupom", "brinde", "tv",
+                     "volta as aulas", "dia dos pais", "dia dos namorados",
+                     "pascoa", "carnaval", "dia das criancas", "liquidacao",
+                     "saldao", "aniversario", "inauguracao"],
         "entidades_extras": [
             {"papel": "BaseAtual", "descricao": "Clientes/usuários atuais da empresa"},
             {"papel": "PublicoNovo", "descricao": "Público que a promoção quer atrair"},
@@ -142,7 +152,9 @@ TIPOS_DECISAO = {
     "expansao_geografica": {
         "nome": "Expandir para nova cidade / região / filial",
         "keywords": ["filial", "expandir", "expansao", "nova cidade", "abrir em",
-                     "regional", "nova unidade", "ponto", "sucursal", "regiao"],
+                     "regional", "nova unidade", "ponto", "sucursal", "regiao",
+                     "expandindo", "ampliar", "novas cidades", "segunda unidade",
+                     "terceira unidade", "interior", "capital", "outra cidade"],
         "entidades_extras": [
             {"papel": "MatrizOrigem", "descricao": "A empresa/loja original que já opera"},
             {"papel": "MercadoDestino", "descricao": "A nova cidade/região alvo"},
@@ -209,15 +221,18 @@ def detect_sector_and_decision(simulation_requirement: str) -> Tuple[str, str]:
         "Milla Internet filial São Fidélis" → ("telecom_isp", "expansao_geografica")
     """
     text = simulation_requirement.lower()
+    # Remover acentos para matching (promoção → promocao, farmácias → farmacias)
+    text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
     
     # Detectar setor
     sector_scores = {}
     for key, template in SETORES.items():
-        score = sum(2 if kw in text else 0 for kw in template["keywords"])
-        # Bonus for exact match on longer keywords
+        score = 0
         for kw in template["keywords"]:
-            if len(kw) > 5 and kw in text:
-                score += 3
+            kw_clean = unicodedata.normalize('NFKD', kw).encode('ascii', 'ignore').decode('ascii')
+            if kw_clean in text:
+                score += 2
+                if len(kw_clean) > 5: score += 3
         sector_scores[key] = score
     
     best_sector = max(sector_scores, key=sector_scores.get)
@@ -227,10 +242,12 @@ def detect_sector_and_decision(simulation_requirement: str) -> Tuple[str, str]:
     # Detectar tipo de decisão
     decision_scores = {}
     for key, template in TIPOS_DECISAO.items():
-        score = sum(2 if kw in text else 0 for kw in template["keywords"])
+        score = 0
         for kw in template["keywords"]:
-            if len(kw) > 5 and kw in text:
-                score += 3
+            kw_clean = unicodedata.normalize('NFKD', kw).encode('ascii', 'ignore').decode('ascii')
+            if kw_clean in text:
+                score += 2
+                if len(kw_clean) > 5: score += 3
         decision_scores[key] = score
     
     best_decision = max(decision_scores, key=decision_scores.get)
@@ -241,7 +258,6 @@ def detect_sector_and_decision(simulation_requirement: str) -> Tuple[str, str]:
     # Se tem "franquia" no setor, o tipo provavelmente é expansão
     if best_sector == "franquia" and best_decision == "novo_negocio":
         best_decision = "expansao_franquia"
-        # E o setor real é outro — tentar segundo melhor
         sector_scores.pop("franquia")
         best_sector = max(sector_scores, key=sector_scores.get) if sector_scores else "varejo_local"
     
