@@ -207,7 +207,7 @@ SECTION_OUTPUT_SCHEMAS = {
     "mapa_forcas": {
         "blocos": [
             {
-                "nome": "ex: Bloco dominante: Pecanha + crediário",
+                "nome": "ex: Bloco dominante: lider de mercado + base fidelizada",
                 "base_clientes": "ex: 3.000-4.500 clientes ativos",
                 "descricao": "2-3 frases",
                 "poder_relativo": "int 1-10",
@@ -236,7 +236,7 @@ SECTION_OUTPUT_SCHEMAS = {
     "recomendacoes": [
         {
             "rank": "int 1-5 (#1 = mais importante)",
-            "titulo": "ex: #1 Construir base própria de recompra via showroom + WhatsApp",
+            "titulo": "ex: #1 Acao prioritaria que decide viabilidade do negocio",
             "descricao": "2-3 frases",
             "citacao": "citação de suporte ou null",
             "impacto_relativo": "int 0-100 (para barra de stack ranking)",
