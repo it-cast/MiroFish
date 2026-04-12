@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '../components/layout/AppShell.vue'
+import AgentPreview from '../components/AgentPreview.vue'
 import service from '../api'
 
 const route  = useRoute()
@@ -39,6 +40,11 @@ const novoAgente = ref('')
 const activeCategory = ref(null)     // Categoria expandida
 const showNewCategory = ref(false)
 const novaCategoria = ref({ icon: '🏷', label: '', color: '#00e5c3' })
+
+// ─── Preview de Agentes ──────────────────────────────────────
+const previewAgents = ref([])
+const previewLoading = ref(false)
+const previewRegenerating = ref(false)
 const customCategories = ref([])
 
 // ─── Biblioteca de Agentes por Categoria ──────────────────────
@@ -485,10 +491,75 @@ async function prepareSimulation(simId, entityTypesFilter = null) {
   return res.data?.data || res.data || res
 }
 
-function confirmarAgentes() {
+async function confirmarAgentes() {
   const types = entityTypes.value.filter(et => et.selected).map(et => et.nameOriginal || et.name)
   const customs = customAgents.value.map(a => a.name)
   selectedTypes.value = [...types, ...customs]
+
+  // Tentar gerar preview dos agentes
+  if (projectData.value?.graph_id) {
+    previewLoading.value = true
+    tela.value = 'preview'
+    try {
+      const res = await service.post('/api/simulation/preview-agents', {
+        graph_id: projectData.value.graph_id,
+        entity_types: types.length > 0 ? types : null,
+        num_agents: cfgAgentes.value,
+      })
+      previewAgents.value = res?.data?.data?.agents || res?.data?.agents || []
+      if (previewAgents.value.length === 0) {
+        // Fallback: sem preview, ir direto pro pipeline
+        iniciarPipeline()
+      }
+    } catch (e) {
+      console.warn('Preview falhou, indo direto pro pipeline:', e)
+      iniciarPipeline()
+    } finally {
+      previewLoading.value = false
+    }
+  } else {
+    iniciarPipeline()
+  }
+}
+
+function onPreviewRemove(idx) {
+  previewAgents.value.splice(idx, 1)
+}
+
+async function onPreviewAdd(description) {
+  try {
+    const res = await service.post('/api/simulation/custom-agent', {
+      description,
+      simulation_requirement: projectData.value?.simulation_requirement || cfgHipotese.value,
+    })
+    const agent = res?.data?.data || res?.data
+    if (agent) {
+      previewAgents.value.push(agent)
+    }
+  } catch (e) {
+    console.error('Falha ao criar agente customizado:', e)
+  }
+}
+
+async function onPreviewRegenerate(count) {
+  if (!projectData.value?.graph_id) return
+  previewRegenerating.value = true
+  try {
+    const res = await service.post('/api/simulation/preview-agents', {
+      graph_id: projectData.value.graph_id,
+      num_agents: count,
+    })
+    const newAgents = res?.data?.data?.agents || res?.data?.agents || []
+    previewAgents.value.push(...newAgents.slice(0, count))
+  } catch (e) {
+    console.warn('Regeneração falhou:', e)
+  } finally {
+    previewRegenerating.value = false
+  }
+}
+
+function onPreviewConfirm(agents) {
+  previewAgents.value = agents
   iniciarPipeline()
 }
 
@@ -718,8 +789,29 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 
       <!-- Iniciar -->
       <button class="btn-iniciar" @click="confirmarAgentes()" :disabled="totalSelecionados === 0 && entityTypes.length === 0">
-        ✦ Iniciar Simulacao com {{ totalSelecionados || entityTypes.filter(e => e.selected).length }} agentes
+        ✦ Gerar Agentes e Revisar
       </button>
+    </div>
+
+    <!-- ════════════════════════════ -->
+    <!-- TELA DE PREVIEW DE AGENTES   -->
+    <!-- ════════════════════════════ -->
+    <div v-else-if="tela === 'preview'" class="preview-screen">
+      <div v-if="previewLoading" class="preview-loading">
+        <div class="loading-spinner"></div>
+        <p>Gerando perfis dos agentes com IA...</p>
+        <p class="loading-sub">Cada agente recebe nome, personalidade, profissão e motivações únicas</p>
+      </div>
+      <AgentPreview v-else
+        :agents="previewAgents"
+        :target-count="cfgAgentes"
+        :regenerating="previewRegenerating"
+        @remove="onPreviewRemove"
+        @add="onPreviewAdd"
+        @confirm="onPreviewConfirm"
+        @back="tela = 'agents'"
+        @regenerate="onPreviewRegenerate"
+      />
     </div>
 
     <!-- ════════════════════════════ -->
@@ -1080,4 +1172,13 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 .asp-cat-icon-input { width:44px; padding:10px; border-radius:14px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:#f0f0ff; font-size:18px; text-align:center; outline:none; }
 .asp-color-input { width:40px; height:40px; border:none; border-radius:8px; cursor:pointer; background:transparent; }
 
-@media (max-width:768px) { .asp-cat-agents { padding-left:20px; } .asp-title-row { flex-direction:column; align-items:flex-start; gap:8px; } .asp-new-cat-row { flex-wrap:wrap; } }</style>
+@media (max-width:768px) { .asp-cat-agents { padding-left:20px; } .asp-title-row { flex-direction:column; align-items:flex-start; gap:8px; } .asp-new-cat-row { flex-wrap:wrap; } }
+
+/* ─── Preview Screen ─── */
+.preview-screen { max-width:1100px; margin:0 auto; }
+.preview-loading { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:400px; gap:16px; }
+.preview-loading p { font-size:16px; font-weight:700; color:var(--text-primary, #1a1a2e); }
+.preview-loading .loading-sub { font-size:12px; color:var(--text-muted, #8888aa); font-weight:400; }
+.loading-spinner { width:40px; height:40px; border:3px solid rgba(0,229,195,0.15); border-top-color:#00e5c3; border-radius:50%; animation:spin 0.8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+</style>
