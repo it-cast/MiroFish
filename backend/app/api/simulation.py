@@ -4,6 +4,8 @@ Step2: ZepEntidadeOASISSimulação
 """
 
 import os
+import json
+import time
 import traceback
 from flask import request, jsonify, send_file
 
@@ -2801,3 +2803,175 @@ def close_simulation_env():
             "error": str(e),
             "traceback": traceback.format_exc()
         }), 500
+
+
+# ============================================================
+# AGENT PREVIEW — Preview, customização e aprovação de agentes
+# ============================================================
+
+@simulation_bp.route('/preview-agents', methods=['POST'])
+def preview_agents():
+    """Gera preview dos agentes para revisão antes de iniciar simulação."""
+    try:
+        data = request.get_json() or {}
+        graph_id = data.get('graph_id')
+
+        if not graph_id:
+            return jsonify({"success": False, "error": "graph_id obrigatório"}), 400
+
+        entity_types = data.get('entity_types')
+        num_agents = data.get('num_agents', 20)
+
+        reader = ZepEntityReader()
+        filtered = reader.filter_defined_entities(
+            graph_id=graph_id,
+            defined_entity_types=entity_types,
+            enrich_with_edges=True
+        )
+
+        if filtered.filtered_count == 0:
+            return jsonify({"success": False, "error": "Nenhuma entidade encontrada no grafo"}), 400
+
+        entities = filtered.entities[:num_agents]
+
+        generator = OasisProfileGenerator(graph_id=graph_id)
+        profiles = generator.generate_profiles_from_entities(
+            entities=entities,
+            use_llm=True,
+            graph_id=graph_id
+        )
+
+        agents = []
+        for i, p in enumerate(profiles):
+            agent = p.to_dict()
+            agent['id'] = f'agent_{i:03d}'
+            agent['_custom'] = False
+            agents.append(agent)
+
+        distribution = {}
+        for a in agents:
+            tipo = a.get('source_entity_type', 'Outro')
+            distribution[tipo] = distribution.get(tipo, 0) + 1
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "agents": agents,
+                "count": len(agents),
+                "distribution": distribution
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Preview agents falhou: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@simulation_bp.route('/custom-agent', methods=['POST'])
+def create_custom_agent():
+    """Gera perfil completo de agente a partir de descrição em texto livre."""
+    try:
+        data = request.get_json() or {}
+        description = data.get('description', '')
+
+        if not description or len(description) < 5:
+            return jsonify({"success": False, "error": "Descrição muito curta"}), 400
+
+        simulation_requirement = data.get('simulation_requirement', '')
+
+        from ..utils.llm_client import LLMClient
+
+        llm = LLMClient()
+
+        prompt = f"""Gere um perfil de agente para simulação de opinião pública em redes sociais.
+
+DESCRIÇÃO DO USUÁRIO: {description}
+CONTEXTO DA SIMULAÇÃO: {simulation_requirement}
+
+Gere um JSON com:
+- "name": Nome completo fictício brasileiro
+- "username": Username para redes sociais (snake_case)
+- "bio": Biografia curta (máx 200 chars) em PT-BR
+- "persona": Descrição detalhada (máx 1500 chars) incluindo personalidade, comportamento, motivações
+- "age": Idade (número inteiro)
+- "gender": "male" ou "female"
+- "mbti": Tipo MBTI
+- "profession": Profissão em PT-BR
+- "interested_topics": Lista de 3-5 tópicos de interesse
+- "source_entity_type": Tipo mais próximo (Consumer, Influencer, Competitor, Professional, Person)
+
+Retorne APENAS JSON válido. Tudo em PT-BR exceto gender e mbti."""
+
+        result = llm.chat_json(
+            messages=[
+                {"role": "system", "content": "Você gera perfis de agentes para simulação. Retorne apenas JSON válido."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=1000
+        )
+
+        import time as _time
+        result['id'] = f'custom_{int(_time.time())}'
+        result['_custom'] = True
+
+        return jsonify({"success": True, "data": result})
+
+    except Exception as e:
+        logger.error(f"Custom agent falhou: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@simulation_bp.route('/approve-agents', methods=['POST'])
+def approve_agents():
+    """Salva lista aprovada de agentes para uso na simulação."""
+    try:
+        import json as _json
+
+        data = request.get_json() or {}
+        simulation_id = data.get('simulation_id')
+        agents = data.get('agents', [])
+
+        if not simulation_id:
+            return jsonify({"success": False, "error": "simulation_id obrigatório"}), 400
+
+        if not agents:
+            return jsonify({"success": False, "error": "Lista de agentes vazia"}), 400
+
+        sim_dir = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, simulation_id)
+        os.makedirs(sim_dir, exist_ok=True)
+
+        profiles_path = os.path.join(sim_dir, "reddit_profiles.json")
+
+        reddit_profiles = []
+        for agent in agents:
+            profile = {
+                "username": agent.get("username", agent.get("name", "agent").replace(" ", "_").lower()),
+                "name": agent.get("name", ""),
+                "bio": agent.get("bio", ""),
+                "persona": agent.get("persona", agent.get("bio", "")),
+                "age": agent.get("age", 30),
+                "gender": agent.get("gender", "female"),
+                "mbti": agent.get("mbti", "INFP"),
+                "country": agent.get("country", "Brasil"),
+                "profession": agent.get("profession", ""),
+                "interested_topics": agent.get("interested_topics", []),
+            }
+            reddit_profiles.append(profile)
+
+        with open(profiles_path, 'w', encoding='utf-8') as f:
+            _json.dump(reddit_profiles, f, ensure_ascii=False, indent=2)
+
+        logger.info(f"Approved {len(reddit_profiles)} agents for simulation {simulation_id}")
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "simulation_id": simulation_id,
+                "agents_count": len(reddit_profiles),
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Approve agents falhou: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
