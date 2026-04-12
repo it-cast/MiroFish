@@ -148,6 +148,19 @@ watch(() => route.params.reportId, async (newId, oldId) => {
 
 // ─── Dados base ───────────────────────────────────────────────
 const titulo   = computed(() => report.value?.outline?.title   || 'Relatório de Previsão')
+const projectName = computed(() => report.value?.project_name || str.value?.meta?.projeto || '')
+const clientName = computed(() => {
+  const pn = projectName.value
+  if (pn.includes(' — ')) return pn.split(' — ')[0].trim()
+  if (pn.includes(' - ')) return pn.split(' - ')[0].trim()
+  return ''
+})
+const projectLabel = computed(() => {
+  const pn = projectName.value
+  if (pn.includes(' — ')) return pn.split(' — ').slice(1).join(' — ').trim()
+  if (pn.includes(' - ')) return pn.split(' - ').slice(1).join(' - ').trim()
+  return pn
+})
 const dataFormatada = computed(() => {
   const d = report.value?.completed_at || report.value?.created_at || ''
   if (!d) return ''
@@ -989,6 +1002,10 @@ function abrirChat() {
             <button class="aug-btn-primary" @click="exportarPDF()">📄 Exportar PDF</button>
           </div>
         </div>
+        <div v-if="projectName" class="aug-project-badge">
+          <span class="aug-project-client" v-if="clientName">{{ clientName }}</span>
+          <span class="aug-project-name">{{ projectLabel }}</span>
+        </div>
         <h1 class="aug-title">{{ titulo }}</h1>
         <p class="aug-subtitle" v-if="geradoEm">{{ geradoEm }}</p>
       </header>
@@ -1001,6 +1018,7 @@ function abrirChat() {
           <div class="aug-nav-inner">
             <a class="aug-nav-item aug-nav-active" @click="scrollTo('ctx')">Contexto</a>
             <a class="aug-nav-item" @click="scrollTo('resumo')">Resumo Executivo</a>
+            <a v-if="strDashboard" class="aug-nav-item" @click="scrollTo('dashboard')">Dashboard</a>
             <a class="aug-nav-item" @click="scrollTo('ceo')">Briefing CEO</a>
             <a class="aug-nav-item" @click="scrollTo('cenarios')">Cenários</a>
             <a class="aug-nav-item" @click="scrollTo('insights')" v-if="secInsights?.content || achadosRelevantes.length">Insights</a>
@@ -1598,4 +1616,9 @@ function abrirChat() {
 .aug-kpi-icon { font-size:20px; display:block; margin-bottom:4px; }
 .aug-kpi-val { font-size:16px; font-weight:800; color:var(--text-primary, #1a1a2e); font-family:var(--font-mono, 'JetBrains Mono', monospace); }
 .aug-kpi-label { font-size:10px; font-weight:600; color:var(--text-muted, #8888aa); text-transform:uppercase; letter-spacing:0.3px; margin-top:4px; }
+
+/* ─── Project/Client Badge ─── */
+.aug-project-badge { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.aug-project-client { font-size:13px; font-weight:800; color:var(--accent2, #7c6ff7); background:rgba(124,111,247,0.08); padding:4px 12px; border-radius:8px; }
+.aug-project-name { font-size:13px; font-weight:600; color:var(--text-secondary, #555570); }
 </style>
